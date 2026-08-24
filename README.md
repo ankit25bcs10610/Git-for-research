@@ -170,6 +170,28 @@ assumed from the plan:
    session) that a single flat `App.tsx` composition can't reasonably hold
    without a router — building that was explicitly out of scope for this
    integration step. See "What would be built next" below.
+6. **Chunking and indexing have no production callers.** `index_chunks`,
+   `chunk_prose`, `chunk_messages`, `chunk_code`, and `add_provenance_edge`
+   are all fully built and tested (`backend/app/retrieval/`), but nothing in
+   this repo calls them after ingestion or after a commit lands. Even once
+   the FastAPI route layer above exists, semantic search has no data to
+   search until something wires ingestion/commit events to these functions.
+7. **The `Artifact` table is never populated.** `app/db/models.py` defines
+   `Artifact`, but no code anywhere creates an `Artifact` row — every
+   `artifact_id` used throughout the versioning, collaboration, and
+   retrieval modules is invented ad hoc by whatever test or caller needs
+   one, not looked up from this table. An artifact browser built against
+   this table has no data source to list from today.
+8. **PDF-ingested content has no working tokenizer path.** The PDF parser's
+   JSON output has no blank lines, so `tokenize_paragraphs` run on it
+   returns a single token for the whole document, and `tokenize_messages`
+   raises a `KeyError` on it outright. PDFs can be committed through the
+   versioning layer, but they cannot be meaningfully diffed, merged, or
+   chunked today — only markdown and chat-export content can.
+9. **Live-editing presence never actually broadcasts.** Nothing in the
+   CRDT/live-editing code calls Yjs awareness's `setLocalStateField`, so
+   `PresenceIndicator` always renders zero users, even with two genuinely
+   connected, syncing clients editing the same document.
 
 Two corrections made to the plan's brief while finalizing `docker-compose.yml`
 (both verified against the actual code, not assumed):
