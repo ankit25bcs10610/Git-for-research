@@ -18,3 +18,7 @@ def init_repo_from_files(repo_path: str, files: dict) -> None:
     tree = index.write_tree()
     signature = pygit2.Signature("system", "system@local")
     repo.create_commit("HEAD", signature, signature, "initial commit", tree, [])
+
+
+def clone_repo(source_path_or_url: str, dest_path: str) -> None:
+    pygit2.clone_repository(source_path_or_url, dest_path)
