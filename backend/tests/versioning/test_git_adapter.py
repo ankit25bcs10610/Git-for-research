@@ -62,3 +62,14 @@ def test_diff_reports_added_removed_and_modified_paths():
         "b.txt": "removed",
         "c.txt": "added",
     }
+
+
+def test_branch_creates_ref_pointing_at_given_commit():
+    repo_path = tempfile.mkdtemp()
+    init_repo_from_files(repo_path, {"a.txt": "content a\n"})
+    artifact = GitVersionedArtifact(repo_path)
+    first_commit = artifact.commit(None, "user-1", "noop")
+
+    artifact.branch("feature", "master")
+
+    assert artifact.branch_head("feature") == first_commit

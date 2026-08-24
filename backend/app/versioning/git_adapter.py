@@ -71,3 +71,11 @@ class GitVersionedArtifact:
             path = patch.new_file.path if patch.new_file.path else patch.old_file.path
             results.append({"path": path, "status": status})
         return results
+
+    def branch(self, name: str, from_ref: str) -> None:
+        commit = self._resolve_commit(from_ref)
+        self.repo.branches.local.create(name, commit)
+
+    def branch_head(self, name: str) -> str:
+        branch_ref = self.repo.branches.local[name]
+        return str(branch_ref.target)
