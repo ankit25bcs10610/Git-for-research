@@ -1755,14 +1755,17 @@ def diff3_merge(base_tokens, ours_tokens, theirs_tokens):
                 if ours_action == "changed":
                     merged_tokens.append(ours_text)
             else:
-                # Append the base text as a placeholder so merged_tokens stays
-                # index-aligned with base_tokens at this position. Callers that
-                # resolve a conflict (e.g. the merge-request flow) overwrite
-                # merged_tokens[position] with the resolved text using the same
-                # `position` this conflict record reports.
+                # position must be the actual index the placeholder will occupy
+                # in merged_tokens, not base_index — insertions or removals at
+                # any earlier base position make those two diverge. Capturing
+                # len(merged_tokens) right before appending the placeholder is
+                # what keeps merged_tokens[position] valid for callers (e.g. the
+                # merge-request flow) that resolve a conflict by overwriting
+                # merged_tokens[position] with the resolved text.
+                position = len(merged_tokens)
                 merged_tokens.append(base_text)
                 conflicts.append({
-                    "position": base_index,
+                    "position": position,
                     "base": base_text,
                     "ours": ours_text if ours_action == "changed" else None,
                     "theirs": theirs_text if theirs_action == "changed" else None,
