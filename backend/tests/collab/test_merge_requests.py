@@ -78,3 +78,49 @@ def test_merge_merge_request_advances_target_head_when_no_conflicts(db_session):
     assert new_head != old_head
     assert mr.status == "merged"
     assert artifact.get_content(new_head) == "Intro paragraph.\n\nEdited body paragraph."
+
+
+def test_merge_merge_request_blocks_on_conflict_until_resolved(db_session):
+    from app.collab.merge_requests import (
+        create_merge_request,
+        get_merge_request_diff,
+        merge_merge_request,
+    )
+    from app.versioning.dag_store import update_branch_head
+
+    artifact_id = "artifact-mr-4"
+    artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
+    root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
+    artifact.branch("main", root)
+    artifact.branch("feature-d", root)
+
+    main_commit = artifact.commit(
+        "Intro paragraph.\n\nMain-edited body.", "user-1", "main edit", root
+    )
+    update_branch_head(db_session, artifact_id, "main", main_commit)
+
+    feature_commit = artifact.commit(
+        "Intro paragraph.\n\nFeature-edited body.", "user-1", "feature edit", root
+    )
+    update_branch_head(db_session, artifact_id, "feature-d", feature_commit)
+
+    mr_id = create_merge_request(db_session, artifact_id, "feature-d", "main")
+
+    diff_result = get_merge_request_diff(db_session, mr_id)
+    assert len(diff_result["conflicts"]) == 1
+
+    blocked = merge_merge_request(db_session, mr_id, None)
+    mr = db_session.get(MergeRequest, mr_id)
+    assert blocked is False
+    assert mr.status == "open"
+
+    conflict_position = diff_result["conflicts"][0]["position"]
+    resolved = merge_merge_request(
+        db_session, mr_id, {conflict_position: "Resolved merged body."}
+    )
+    mr = db_session.get(MergeRequest, mr_id)
+    assert resolved is True
+    assert mr.status == "merged"
+
+    new_head = get_branch_head(db_session, artifact_id, "main")
+    assert artifact.get_content(new_head) == "Intro paragraph.\n\nResolved merged body."
