@@ -47,8 +47,21 @@ def parse_codebase_git(repo_path_or_url: str, dest_path: str) -> ParsedArtifact:
             dirs.remove(".git")
         for filename in filenames:
             full_path = os.path.join(root, filename)
+            if os.path.islink(full_path):
+                # Skip symlinks: a cloned repo is untrusted input, and a
+                # symlink could point outside dest_path (e.g. /etc/passwd,
+                # an SSH key). Following it would leak arbitrary files from
+                # the host into the ingested artifact content.
+                continue
             relative_path = os.path.relpath(full_path, dest_path).replace(os.sep, "/")
-            with open(full_path, "rb") as handle:
+            try:
+                # O_NOFOLLOW makes this TOCTOU-safe: even if a symlink is
+                # swapped in between the islink() check above and this open,
+                # the OS refuses to follow it and raises OSError instead.
+                fd = os.open(full_path, os.O_RDONLY | os.O_NOFOLLOW)
+            except OSError:
+                continue
+            with os.fdopen(fd, "rb") as handle:
                 raw_bytes = handle.read()
             try:
                 text = raw_bytes.decode("utf-8")

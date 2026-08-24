@@ -32,6 +32,30 @@ def test_parse_codebase_zip_extracts_text_and_skips_binary():
     assert "data.bin" not in artifact.content
 
 
+def test_parse_codebase_zip_handles_empty_zip():
+    zip_bytes = _build_zip_bytes({})
+
+    artifact = parse_codebase_zip(zip_bytes)
+
+    assert artifact.artifact_type == "codebase"
+    assert artifact.name == "codebase"
+    assert artifact.content == {}
+
+
+def test_parse_codebase_zip_all_binary_files_yields_empty_content():
+    zip_bytes = _build_zip_bytes(
+        {
+            "data1.bin": b"\xff\xfe\x00\x01binary-garbage\x80\x81",
+            "data2.bin": b"\x00\x01\x02\x03\xf8\xf9",
+        }
+    )
+
+    artifact = parse_codebase_zip(zip_bytes)
+
+    assert artifact.content == {}
+    assert artifact.name == "codebase"
+
+
 def test_parse_codebase_zip_derives_name_from_top_level_directory():
     zip_bytes = _build_zip_bytes(
         {
