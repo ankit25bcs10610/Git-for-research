@@ -9,6 +9,7 @@ from app.versioning.dag_store import (
     get_commit,
     create_branch,
     get_branch_head,
+    update_branch_head,
 )
 
 
@@ -89,3 +90,34 @@ def test_get_branch_head_returns_none_for_missing_branch():
 
     with get_session() as session:
         assert get_branch_head(session, artifact_id=artifact_id, name="does-not-exist") is None
+
+
+def test_update_branch_head_updates_pointer():
+    artifact_id = str(uuid.uuid4())
+    branch_name = f"main-{uuid.uuid4()}"
+
+    with get_session() as session:
+        first_blob_hash = create_blob(session, f"first content {uuid.uuid4()}")
+        first_commit_id = create_commit(
+            session,
+            artifact_id=artifact_id,
+            blob_hash=first_blob_hash,
+            parent_ids=[],
+            author="user-1",
+            message="first commit",
+        )
+        create_branch(session, artifact_id=artifact_id, name=branch_name, head_commit_id=first_commit_id)
+
+        second_blob_hash = create_blob(session, f"second content {uuid.uuid4()}")
+        second_commit_id = create_commit(
+            session,
+            artifact_id=artifact_id,
+            blob_hash=second_blob_hash,
+            parent_ids=[first_commit_id],
+            author="user-1",
+            message="second commit",
+        )
+
+        update_branch_head(session, artifact_id=artifact_id, name=branch_name, new_commit_id=second_commit_id)
+
+        assert get_branch_head(session, artifact_id=artifact_id, name=branch_name) == second_commit_id

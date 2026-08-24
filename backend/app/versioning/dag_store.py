@@ -72,3 +72,15 @@ def get_branch_head(session, artifact_id: str, name: str) -> str:
     if branch is None:
         return None
     return branch.head_commit_id
+
+
+def update_branch_head(session, artifact_id: str, name: str, new_commit_id: str) -> None:
+    branch = (
+        session.query(Branch)
+        .filter_by(artifact_id=artifact_id, name=name)
+        .one_or_none()
+    )
+    if branch is None:
+        raise ValueError(f"branch '{name}' not found for artifact {artifact_id}")
+    branch.head_commit_id = new_commit_id
+    session.commit()
