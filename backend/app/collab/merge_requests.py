@@ -2,7 +2,13 @@ import uuid
 
 from app.db.models import MergeRequest
 from app.versioning.dag_adapter import DagVersionedArtifact
-from app.versioning.dag_store import get_branch_head, get_commit, update_branch_head
+from app.versioning.dag_store import (
+    create_blob,
+    create_commit,
+    get_branch_head,
+    get_commit,
+    update_branch_head,
+)
 from app.versioning.diff_engine import tokenize_paragraphs
 from app.versioning.merge_engine import diff3_merge
 
@@ -92,6 +98,19 @@ def merge_merge_request(session, mr_id: str, resolutions=None) -> bool:
         merge_result = artifact.merge(mr.base_commit_ref, target_head, source_head)
         merge_commit_id = merge_result["merge_commit_id"]
     else:
+        # `resolutions` arrives with string keys whenever it has been
+        # round-tripped through JSON (e.g. an HTTP request body deserialized
+        # by the route layer), while `conflicts[*]["position"]` is always a
+        # plain int. Coerce keys to int defensively before comparing against
+        # conflict_positions, so a real resolution submitted through the UI
+        # isn't silently rejected just because its keys are strings on the
+        # wire. Non-coercible keys are treated the same as any other invalid
+        # resolution: reject, don't raise.
+        try:
+            resolutions = {int(k): v for k, v in resolutions.items()}
+        except (ValueError, TypeError):
+            return False
+
         conflict_positions = {c["position"] for c in conflicts}
         if set(resolutions.keys()) != conflict_positions:
             return False
@@ -99,8 +118,22 @@ def merge_merge_request(session, mr_id: str, resolutions=None) -> bool:
         for position, resolved_text in resolutions.items():
             merged_tokens[position] = resolved_text
         merge_content = "\n\n".join(merged_tokens)
-        merge_commit_id = artifact.commit(
-            merge_content, "user-1", "resolve merge conflicts", target_head
+        # A resolved-conflict commit must record BOTH branches as parents,
+        # the same way DagVersionedArtifact.merge()'s clean-merge auto-commit
+        # path does (see dag_adapter.py's `create_commit(..., [ours_commit_id,
+        # theirs_commit_id], ...)` call) -- artifact.commit() only accepts a
+        # single parent_ref, which would silently drop the source branch out
+        # of history. Build the commit directly via create_blob/create_commit
+        # instead, exactly like that clean-merge path does, with target_head
+        # (ours) first and source_head (theirs) second.
+        blob_hash = create_blob(session, merge_content)
+        merge_commit_id = create_commit(
+            session,
+            mr.artifact_id,
+            blob_hash,
+            [target_head, source_head],
+            "user-1",
+            "resolve merge conflicts",
         )
 
     if not update_branch_head(

@@ -1,6 +1,6 @@
 from app.collab.merge_requests import create_merge_request
 from app.versioning.dag_adapter import DagVersionedArtifact
-from app.versioning.dag_store import get_branch_head
+from app.versioning.dag_store import get_branch_head, get_commit
 from app.versioning.diff_engine import tokenize_paragraphs
 from app.db.models import MergeRequest
 
@@ -358,3 +358,203 @@ def test_merge_merge_request_returns_false_and_does_not_clobber_concurrent_head_
     # The concurrent writer's commit must still be reachable from "main" —
     # this finalizer must not silently overwrite/orphan it.
     assert final_head == concurrent_commit
+
+
+def test_merge_merge_request_resolved_conflict_commit_has_both_parents(db_session):
+    """Regression test for Finding C1.
+
+    Before the fix, the conflict-resolution path built the resolved commit
+    via `artifact.commit(merge_content, "user-1", "resolve merge conflicts",
+    target_head)` -- DagVersionedArtifact.commit only accepts a single
+    parent_ref, so the resulting commit's parent_ids was just [target_head]
+    and the source branch was silently dropped from history. It must now
+    carry BOTH branch heads as parents, the same way the clean-merge
+    auto-commit path in dag_adapter.py already does.
+    """
+    from app.collab.merge_requests import (
+        create_merge_request,
+        get_merge_request_diff,
+        merge_merge_request,
+    )
+    from app.versioning.dag_store import update_branch_head
+
+    artifact_id = "artifact-mr-11"
+    artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
+    root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
+    artifact.branch("main", root)
+    artifact.branch("feature-k", root)
+
+    main_commit = artifact.commit(
+        "Intro paragraph.\n\nMain-edited body.", "user-1", "main edit", root
+    )
+    update_branch_head(db_session, artifact_id, "main", main_commit)
+
+    feature_commit = artifact.commit(
+        "Intro paragraph.\n\nFeature-edited body.", "user-1", "feature edit", root
+    )
+    update_branch_head(db_session, artifact_id, "feature-k", feature_commit)
+
+    mr_id = create_merge_request(db_session, artifact_id, "feature-k", "main")
+    diff_result = get_merge_request_diff(db_session, mr_id)
+    conflict_position = diff_result["conflicts"][0]["position"]
+
+    resolved = merge_merge_request(
+        db_session, mr_id, {conflict_position: "Resolved merged body."}
+    )
+    assert resolved is True
+
+    merge_commit_id = get_branch_head(db_session, artifact_id, "main")
+    merge_commit = get_commit(db_session, merge_commit_id)
+
+    # Both the pre-merge target head ("main") and the source branch head
+    # ("feature-k") must be present as parents -- neither one silently
+    # dropped.
+    assert set(merge_commit.parent_ids) == {main_commit, feature_commit}
+
+
+def test_merge_merge_request_resolved_conflict_source_reachable_via_all_parents(db_session):
+    """Regression test for Finding C1.
+
+    Proves the conflict-resolved merge commit is actually "stuck" in
+    history: walking ALL of its parent edges (not just the first, as
+    `_find_common_ancestor`'s simplified mainline-only walk does) reaches
+    the source branch's own commit directly. Before the fix this commit was
+    unreachable from the merge commit by any parent edge at all, because it
+    was never recorded as a parent in the first place.
+    """
+    from app.collab.merge_requests import (
+        create_merge_request,
+        get_merge_request_diff,
+        merge_merge_request,
+    )
+    from app.versioning.dag_store import update_branch_head
+
+    artifact_id = "artifact-mr-12"
+    artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
+    root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
+    artifact.branch("main", root)
+    artifact.branch("feature-l", root)
+
+    main_commit = artifact.commit(
+        "Intro paragraph.\n\nMain-edited body.", "user-1", "main edit", root
+    )
+    update_branch_head(db_session, artifact_id, "main", main_commit)
+
+    feature_commit = artifact.commit(
+        "Intro paragraph.\n\nFeature-edited body.", "user-1", "feature edit", root
+    )
+    update_branch_head(db_session, artifact_id, "feature-l", feature_commit)
+
+    mr_id = create_merge_request(db_session, artifact_id, "feature-l", "main")
+    diff_result = get_merge_request_diff(db_session, mr_id)
+    conflict_position = diff_result["conflicts"][0]["position"]
+
+    resolved = merge_merge_request(
+        db_session, mr_id, {conflict_position: "Resolved merged body."}
+    )
+    assert resolved is True
+
+    merge_commit_id = get_branch_head(db_session, artifact_id, "main")
+
+    # Full (all-parents, not just first-parent) BFS over ancestor edges from
+    # the merge commit.
+    seen = set()
+    frontier = [merge_commit_id]
+    while frontier:
+        current = frontier.pop()
+        if current in seen:
+            continue
+        seen.add(current)
+        commit = get_commit(db_session, current)
+        frontier.extend(commit.parent_ids)
+
+    assert feature_commit in seen
+    assert main_commit in seen
+    assert root in seen
+
+
+def test_merge_merge_request_accepts_string_keyed_resolutions(db_session):
+    """Regression test for Finding C2.
+
+    `resolutions` arrives with string keys whenever it round-trips through
+    JSON (e.g. an HTTP request body) -- exactly how the frontend's
+    `submitResolution` sends it (`JSON.stringify({resolutions})`). Before the
+    fix, `set(resolutions.keys()) != conflict_positions` always mismatched
+    (`{"2"} != {2}`), so every real resolution submitted through the UI was
+    silently rejected.
+    """
+    from app.collab.merge_requests import (
+        create_merge_request,
+        get_merge_request_diff,
+        merge_merge_request,
+    )
+    from app.versioning.dag_store import update_branch_head
+
+    artifact_id = "artifact-mr-13"
+    artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
+    root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
+    artifact.branch("main", root)
+    artifact.branch("feature-m", root)
+
+    main_commit = artifact.commit(
+        "Intro paragraph.\n\nMain-edited body.", "user-1", "main edit", root
+    )
+    update_branch_head(db_session, artifact_id, "main", main_commit)
+
+    feature_commit = artifact.commit(
+        "Intro paragraph.\n\nFeature-edited body.", "user-1", "feature edit", root
+    )
+    update_branch_head(db_session, artifact_id, "feature-m", feature_commit)
+
+    mr_id = create_merge_request(db_session, artifact_id, "feature-m", "main")
+    diff_result = get_merge_request_diff(db_session, mr_id)
+    conflict_position = diff_result["conflicts"][0]["position"]
+
+    # String key, exactly as it would arrive after a JSON round-trip.
+    string_keyed_resolutions = {str(conflict_position): "Resolved merged body."}
+
+    result = merge_merge_request(db_session, mr_id, string_keyed_resolutions)
+
+    mr = db_session.get(MergeRequest, mr_id)
+    new_head = get_branch_head(db_session, artifact_id, "main")
+
+    assert result is True
+    assert mr.status == "merged"
+    assert artifact.get_content(new_head) == "Intro paragraph.\n\nResolved merged body."
+
+
+def test_merge_merge_request_rejects_non_numeric_string_keyed_resolutions(db_session):
+    """Regression test for Finding C2.
+
+    A resolutions dict with a key that can't be coerced to int must be
+    rejected cleanly (return False), not raise.
+    """
+    from app.collab.merge_requests import create_merge_request, merge_merge_request
+    from app.versioning.dag_store import update_branch_head
+
+    artifact_id = "artifact-mr-14"
+    artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
+    root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
+    artifact.branch("main", root)
+    artifact.branch("feature-n", root)
+
+    main_commit = artifact.commit(
+        "Intro paragraph.\n\nMain-edited body.", "user-1", "main edit", root
+    )
+    update_branch_head(db_session, artifact_id, "main", main_commit)
+
+    feature_commit = artifact.commit(
+        "Intro paragraph.\n\nFeature-edited body.", "user-1", "feature edit", root
+    )
+    update_branch_head(db_session, artifact_id, "feature-n", feature_commit)
+
+    mr_id = create_merge_request(db_session, artifact_id, "feature-n", "main")
+
+    result = merge_merge_request(db_session, mr_id, {"abc": "text"})
+
+    mr = db_session.get(MergeRequest, mr_id)
+    head_after = get_branch_head(db_session, artifact_id, "main")
+
+    assert result is False
+    assert mr.status == "open"
+    assert head_after == main_commit
