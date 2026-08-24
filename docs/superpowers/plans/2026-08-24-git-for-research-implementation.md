@@ -3077,6 +3077,12 @@ Add this method inside `GitVersionedArtifact`, after `get_content`:
         ours_branch = self.repo.branches.local.get(ours_ref)
         if ours_branch is not None:
             ours_branch.set_target(merge_commit_id)
+            # Move HEAD, the working directory, and the on-disk index to the
+            # merge commit's tree. Without this, the working directory still
+            # holds the pre-merge content, and the next commit() call's
+            # index.add_all() re-stages that stale content, silently
+            # reverting the merge.
+            self.checkout_branch(ours_ref)
         return {"merged": True, "conflicts": []}
 ```
 
@@ -3179,6 +3185,12 @@ Replace the body of `merge` inside `GitVersionedArtifact` in `backend/app/versio
         ours_branch = self.repo.branches.local.get(ours_ref)
         if ours_branch is not None:
             ours_branch.set_target(merge_commit_id)
+            # Move HEAD, the working directory, and the on-disk index to the
+            # merge commit's tree. Without this, the working directory still
+            # holds the pre-merge content, and the next commit() call's
+            # index.add_all() re-stages that stale content, silently
+            # reverting the merge.
+            self.checkout_branch(ours_ref)
         return {"merged": True, "conflicts": []}
 ```
 
@@ -3253,17 +3265,20 @@ def _extract_definitions(source: str, language: str) -> dict:
     tree = parser.parse(source_bytes)
     definitions = {}
 
-    def walk(node: Node) -> None:
-        for child in node.children:
-            if child.type in _DEFINITION_NODE_TYPES:
-                name_node = child.child_by_field_name("name")
-                if name_node is not None:
-                    name = source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8")
-                    text = source_bytes[child.start_byte:child.end_byte].decode("utf-8")
-                    definitions[name] = {"node_type": child.type, "text": text}
-            walk(child)
+    # Only scan direct children of the module (one level, no recursion) so
+    # this stays scoped to genuinely top-level functions/classes. Recursing
+    # into matched or unmatched nodes would also pick up methods nested
+    # inside classes, and since those are keyed by name alone, two classes
+    # that both define e.g. __init__ would collide in this dict and one
+    # change would silently overwrite or shadow the other.
+    for child in tree.root_node.children:
+        if child.type in _DEFINITION_NODE_TYPES:
+            name_node = child.child_by_field_name("name")
+            if name_node is not None:
+                name = source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8")
+                text = source_bytes[child.start_byte:child.end_byte].decode("utf-8")
+                definitions[name] = {"node_type": child.type, "text": text}
 
-    walk(tree.root_node)
     return definitions
 
 
