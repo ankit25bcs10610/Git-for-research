@@ -10,3 +10,14 @@ def test_structural_diff_detects_added_function():
     assert result == [
         {"node_type": "function_definition", "name": "baz", "status": "added"}
     ]
+
+
+def test_structural_diff_detects_removed_function():
+    old_code = "def foo():\n    return 1\n\n\ndef bar():\n    return 2\n"
+    new_code = "def foo():\n    return 1\n"
+
+    result = structural_diff(old_code, new_code, "python")
+
+    assert result == [
+        {"node_type": "function_definition", "name": "bar", "status": "removed"}
+    ]

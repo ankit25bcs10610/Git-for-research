@@ -42,4 +42,11 @@ def structural_diff(old_code: str, new_code: str, language: str) -> list:
             results.append(
                 {"node_type": new_def["node_type"], "name": name, "status": "added"}
             )
+
+    for name, old_def in old_defs.items():
+        if name not in new_defs:
+            results.append(
+                {"node_type": old_def["node_type"], "name": name, "status": "removed"}
+            )
+
     return results
