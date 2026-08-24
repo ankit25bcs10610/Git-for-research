@@ -53,3 +53,20 @@ def create_merge_request(session, artifact_id: str, source_branch: str, target_b
     session.add(mr)
     session.commit()
     return mr_id
+
+
+def get_merge_request_diff(session, mr_id: str) -> dict:
+    mr = session.get(MergeRequest, mr_id)
+    artifact = DagVersionedArtifact(session, mr.artifact_id, _paragraph_tokenizer)
+
+    base_content = artifact.get_content(mr.base_commit_ref)
+    target_head = artifact.branch_head(mr.target_branch)
+    source_head = artifact.branch_head(mr.source_branch)
+    target_content = artifact.get_content(target_head)
+    source_content = artifact.get_content(source_head)
+
+    base_tokens = _paragraph_tokenizer(base_content)
+    ours_tokens = _paragraph_tokenizer(target_content)
+    theirs_tokens = _paragraph_tokenizer(source_content)
+
+    return diff3_merge(base_tokens, ours_tokens, theirs_tokens)
