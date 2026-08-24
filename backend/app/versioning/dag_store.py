@@ -2,7 +2,7 @@ import hashlib
 import uuid
 from datetime import datetime, timezone
 
-from app.db.models import Blob, Commit
+from app.db.models import Blob, Branch, Commit
 
 
 def create_blob(session, content: str) -> str:
@@ -50,3 +50,25 @@ def get_commit(session, commit_id: str) -> Commit:
     if commit is None:
         raise ValueError(f"commit not found for id {commit_id}")
     return commit
+
+
+def create_branch(session, artifact_id: str, name: str, head_commit_id: str) -> None:
+    branch = Branch(
+        id=str(uuid.uuid4()),
+        artifact_id=artifact_id,
+        name=name,
+        head_commit_id=head_commit_id,
+    )
+    session.add(branch)
+    session.commit()
+
+
+def get_branch_head(session, artifact_id: str, name: str) -> str:
+    branch = (
+        session.query(Branch)
+        .filter_by(artifact_id=artifact_id, name=name)
+        .one_or_none()
+    )
+    if branch is None:
+        return None
+    return branch.head_commit_id
