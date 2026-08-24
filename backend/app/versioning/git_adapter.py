@@ -149,4 +149,5 @@ class GitVersionedArtifact:
         ours_branch = self.repo.branches.local.get(ours_ref)
         if ours_branch is not None:
             ours_branch.set_target(merge_commit_id)
+            self.checkout_branch(ours_ref)
         return {"merged": True, "conflicts": []}

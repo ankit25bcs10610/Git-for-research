@@ -125,6 +125,34 @@ def test_merge_without_conflicts_combines_both_branches_edits():
     assert merged_content["b.txt"] == "content b edited on master\n"
 
 
+def test_merge_without_conflicts_leaves_working_tree_and_index_in_sync():
+    repo_path = tempfile.mkdtemp()
+    init_repo_from_files(
+        repo_path, {"a.txt": "content a\n", "b.txt": "content b\n"}
+    )
+    artifact = GitVersionedArtifact(repo_path)
+    artifact.branch("feature", "master")
+    base_ref = artifact.branch_head("feature")
+
+    artifact.checkout_branch("feature")
+    artifact.commit({"a.txt": "content a edited on feature\n"}, "user-1", "edit a on feature")
+
+    artifact.checkout_branch("master")
+    artifact.commit({"b.txt": "content b edited on master\n"}, "user-1", "edit b on master")
+
+    result = artifact.merge(base_ref, "master", "feature")
+    assert result["merged"] is True
+
+    # A no-op commit right after the merge re-stages whatever is physically on
+    # disk. If the working directory/index were not synced to the merge tree,
+    # this would silently revert the feature branch's edit.
+    artifact.commit(None, "user-1", "noop after merge")
+
+    merged_content = artifact.get_content("master")
+    assert merged_content["a.txt"] == "content a edited on feature\n"
+    assert merged_content["b.txt"] == "content b edited on master\n"
+
+
 def test_merge_with_conflicting_edits_returns_single_conflict():
     repo_path = tempfile.mkdtemp()
     init_repo_from_files(repo_path, {"a.txt": "content a\n"})
