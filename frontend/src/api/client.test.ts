@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchArtifacts, fetchDiff } from "./client";
+import { fetchArtifacts, fetchDiff, fetchMergeRequest, submitResolution } from "./client";
+import type { ConflictRecord } from "./client";
 
 describe("fetchArtifacts", () => {
   beforeEach(() => {
@@ -38,5 +39,44 @@ describe("fetchDiff", () => {
       "/api/artifacts/artifact-1/diff?ref_a=main&ref_b=feature-1"
     );
     expect(result).toEqual(mockTokens);
+  });
+});
+
+describe("fetchMergeRequest", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("fetches conflicts for a merge request", async () => {
+    const mockConflicts: ConflictRecord[] = [
+      { position: 0, base: "base text", ours: "ours text", theirs: "theirs text" },
+    ];
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ conflicts: mockConflicts }),
+    }) as unknown as typeof fetch;
+
+    const result = await fetchMergeRequest("mr-1");
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/merge-requests/mr-1/diff");
+    expect(result.conflicts).toEqual(mockConflicts);
+  });
+});
+
+describe("submitResolution", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("posts resolutions as JSON to the merge endpoint", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch;
+
+    await submitResolution("mr-1", { 0: "resolved text" });
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/merge-requests/mr-1/merge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resolutions: { 0: "resolved text" } }),
+    });
   });
 });
