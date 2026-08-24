@@ -1,8 +1,10 @@
 import io
+import os
 import zipfile
 from typing import Dict, Iterable
 
 from app.ingestion.base import ParsedArtifact
+from app.versioning.git_adapter import clone_repo
 
 
 def _derive_top_level_name(paths: Iterable[str], fallback: str = "codebase") -> str:
@@ -31,4 +33,27 @@ def parse_codebase_zip(zip_bytes: bytes) -> ParsedArtifact:
                 continue
             files[entry.filename] = text
         name = _derive_top_level_name(archive.namelist())
+    return ParsedArtifact(artifact_type="codebase", name=name, content=files)
+
+
+def parse_codebase_git(repo_path_or_url: str, dest_path: str) -> ParsedArtifact:
+    clone_repo(repo_path_or_url, dest_path)
+    # Full history is preserved separately because dest_path is the git
+    # repository later opened by GitVersionedArtifact; this ParsedArtifact
+    # content field is only a snapshot used for chunking and retrieval.
+    files: Dict[str, str] = {}
+    for root, dirs, filenames in os.walk(dest_path):
+        if ".git" in dirs:
+            dirs.remove(".git")
+        for filename in filenames:
+            full_path = os.path.join(root, filename)
+            relative_path = os.path.relpath(full_path, dest_path).replace(os.sep, "/")
+            with open(full_path, "rb") as handle:
+                raw_bytes = handle.read()
+            try:
+                text = raw_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            files[relative_path] = text
+    name = os.path.basename(os.path.normpath(dest_path))
     return ParsedArtifact(artifact_type="codebase", name=name, content=files)
