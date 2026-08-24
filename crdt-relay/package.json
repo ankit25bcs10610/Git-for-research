@@ -1,0 +1,17 @@
+{
+  "name": "crdt-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CRDT sync relay for Git for Research",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --check server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "yjs": "^13.6.14",
+    "y-websocket": "^1.5.1",
+    "y-protocols": "^1.0.6"
+  }
+}
