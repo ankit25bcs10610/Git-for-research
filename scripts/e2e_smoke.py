@@ -2,21 +2,16 @@
 """
 End to end smoke test for Git for Research.
 
-This script requires `docker compose up --build` to already be running
-against the root docker-compose.yml before it is executed. It is meant
-to be run manually as the final integration check against a live stack,
-not as part of the pytest suite, since it makes real HTTP calls across
-service boundaries and depends on container networking and timing.
+This script requires a running backend (either `docker compose up --build`
+against the root docker-compose.yml, or a local `uvicorn app.main:app`
+pointed at a reachable Postgres+pgvector instance) before it is executed.
+It is meant to be run manually as an integration check against a live
+stack, not as part of the pytest suite, since it makes real HTTP calls and
+depends on a running server and database.
 
-As of this writing, the backend only exposes GET /health -- the
-ingestion / branch / commit / merge-request / search HTTP routes this
-script calls are the intended final shape of the API described in the
-project plan, but the FastAPI route layer wiring them up to the
-already-built ingestion, versioning, and retrieval modules has not been
-built yet (see README.md, "What wasn't completed"). Running this script
-today will fail at the first request with a 404. It is included so the
-route layer's contract is pinned down precisely, and so that this
-becomes a runnable, meaningful check as soon as those routes exist.
+The FastAPI route layer (`backend/app/api/`) now exists and every request
+below has been run by hand against a live server -- see README.md, "How to
+run it".
 
 Usage:
     python scripts/e2e_smoke.py
@@ -27,29 +22,47 @@ Usage:
 import sys
 import tempfile
 import os
+import uuid
 
 import requests
 
 BASE_URL = os.environ.get("GFR_BASE_URL", "http://localhost:8000")
 USER_ID = "user-1"
+WORKSPACE_ID = str(uuid.uuid4())
 
-CHATGPT_EXPORT_FIXTURE = """{
-  "title": "Sample Research Chat",
-  "mapping": {
-    "node-1": {
-      "message": {
-        "author": {"role": "user"},
-        "content": {"parts": ["What is the boiling point of water at sea level?"]}
-      }
-    },
-    "node-2": {
-      "message": {
-        "author": {"role": "assistant"},
-        "content": {"parts": ["Water boils at 100 degrees Celsius at sea level."]}
+CHATGPT_EXPORT_FIXTURE = """[
+  {
+    "title": "Sample Research Chat",
+    "mapping": {
+      "root": {
+        "id": "root",
+        "message": null,
+        "parent": null,
+        "children": ["n1"]
+      },
+      "n1": {
+        "id": "n1",
+        "message": {
+          "author": {"role": "user"},
+          "content": {"parts": ["What is the boiling point of water at sea level?"]},
+          "create_time": 1000.0
+        },
+        "parent": "root",
+        "children": ["n2"]
+      },
+      "n2": {
+        "id": "n2",
+        "message": {
+          "author": {"role": "assistant"},
+          "content": {"parts": ["Water boils at 100 degrees Celsius at sea level."]},
+          "create_time": 1001.0
+        },
+        "parent": "n1",
+        "children": []
       }
     }
   }
-}"""
+]"""
 
 MARKDOWN_FIXTURE = """# Research Notes
 
@@ -79,9 +92,8 @@ def ingest_markdown() -> str:
         path = f.name
     with open(path, "rb") as fh:
         response = requests.post(
-            f"{BASE_URL}/api/artifacts/ingest/markdown",
+            f"{BASE_URL}/api/workspaces/{WORKSPACE_ID}/artifacts/ingest/markdown",
             files={"file": ("research_notes.md", fh, "text/markdown")},
-            data={"user_id": USER_ID},
         )
     os.remove(path)
     if response.status_code != 200:
@@ -101,17 +113,16 @@ def ingest_chatgpt() -> str:
         path = f.name
     with open(path, "rb") as fh:
         response = requests.post(
-            f"{BASE_URL}/api/artifacts/ingest/chatgpt",
+            f"{BASE_URL}/api/workspaces/{WORKSPACE_ID}/artifacts/ingest/chatgpt",
             files={"file": ("chat_export.json", fh, "application/json")},
-            data={"user_id": USER_ID},
         )
     os.remove(path)
     if response.status_code != 200:
         fail(f"chatgpt ingest returned status {response.status_code}: {response.text}")
     body = response.json()
-    if "artifact_id" not in body:
-        fail(f"chatgpt ingest response missing artifact_id: {body}")
-    artifact_id = body["artifact_id"]
+    if "artifacts" not in body or not body["artifacts"]:
+        fail(f"chatgpt ingest response missing artifacts: {body}")
+    artifact_id = body["artifacts"][0]["artifact_id"]
     print(f"ingested chatgpt artifact_id={artifact_id}")
     return artifact_id
 
@@ -120,7 +131,7 @@ def create_conflicting_branch_and_merge(markdown_artifact_id: str) -> None:
     step("Step 2a: create a branch on the markdown artifact")
     branch_response = requests.post(
         f"{BASE_URL}/api/artifacts/{markdown_artifact_id}/branches",
-        json={"branch_name": "edit-atp-paragraph", "user_id": USER_ID},
+        json={"name": "edit-atp-paragraph", "from_ref": "main"},
     )
     if branch_response.status_code != 200:
         fail(f"branch creation returned status {branch_response.status_code}: {branch_response.text}")
@@ -131,7 +142,7 @@ def create_conflicting_branch_and_merge(markdown_artifact_id: str) -> None:
         f"{BASE_URL}/api/artifacts/{markdown_artifact_id}/commits",
         json={
             "branch_name": "edit-atp-paragraph",
-            "user_id": USER_ID,
+            "author": USER_ID,
             "content": MARKDOWN_FIXTURE.replace(
                 "The paragraph under study describes ATP production in the citric acid cycle.",
                 "The paragraph under study describes ATP synthesis inside the mitochondrial matrix.",
@@ -148,7 +159,7 @@ def create_conflicting_branch_and_merge(markdown_artifact_id: str) -> None:
         f"{BASE_URL}/api/artifacts/{markdown_artifact_id}/commits",
         json={
             "branch_name": "main",
-            "user_id": USER_ID,
+            "author": USER_ID,
             "content": MARKDOWN_FIXTURE.replace(
                 "The paragraph under study describes ATP production in the citric acid cycle.",
                 "The paragraph under study describes ATP production during oxidative phosphorylation.",
@@ -163,11 +174,7 @@ def create_conflicting_branch_and_merge(markdown_artifact_id: str) -> None:
     step("Step 2d: open a merge request from the branch into main")
     merge_request_response = requests.post(
         f"{BASE_URL}/api/artifacts/{markdown_artifact_id}/merge-requests",
-        json={
-            "source_branch": "edit-atp-paragraph",
-            "target_branch": "main",
-            "user_id": USER_ID,
-        },
+        json={"source_branch": "edit-atp-paragraph", "target_branch": "main"},
     )
     if merge_request_response.status_code != 200:
         fail(f"merge request creation returned status {merge_request_response.status_code}: {merge_request_response.text}")
@@ -178,9 +185,7 @@ def create_conflicting_branch_and_merge(markdown_artifact_id: str) -> None:
     print(f"opened merge_request_id={merge_request_id}")
 
     step("Step 2e: assert the diff endpoint reports a conflict")
-    diff_response = requests.get(
-        f"{BASE_URL}/api/artifacts/{markdown_artifact_id}/merge-requests/{merge_request_id}/diff"
-    )
+    diff_response = requests.get(f"{BASE_URL}/api/merge-requests/{merge_request_id}/diff")
     if diff_response.status_code != 200:
         fail(f"diff endpoint returned status {diff_response.status_code}: {diff_response.text}")
     diff_body = diff_response.json()
@@ -209,7 +214,7 @@ def run_search(expected_artifact_ids: list) -> None:
 
 def main() -> None:
     print("Running Git for Research end to end smoke test against", BASE_URL)
-    print("This script assumes docker compose up --build is already running.")
+    print("This script assumes the backend is already running (docker compose, or a local uvicorn).")
 
     markdown_artifact_id = ingest_markdown()
     chatgpt_artifact_id = ingest_chatgpt()

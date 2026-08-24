@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 End-to-end demo of the Git for Research versioning + retrieval engine,
-run directly against the built Python modules (no HTTP route layer exists
-yet -- see README.md's gap list). This is what actually gets exercised:
+run directly against the built Python modules (no HTTP involved -- for
+the HTTP route layer, see scripts/e2e_smoke.py and README.md instead).
+This is what actually gets exercised:
 
   1. Ingest two artifacts (a markdown doc, a ChatGPT export).
   2. Commit + branch the markdown doc, make CONFLICTING edits to the same
