@@ -66,6 +66,26 @@ and `404` for `POST /api/artifacts/ingest/markdown`. The script is included
 because it pins down the intended contract for that route layer precisely,
 and becomes a real, runnable check the moment those routes exist.
 
+**To see the engine actually work today, without the route layer**, run:
+
+```bash
+backend/.venv/bin/python scripts/demo.py
+```
+
+against the same local Postgres+pgvector instance the test suite uses. This
+calls the built Python modules directly (no HTTP) and walks through the
+full story end to end: ingest a markdown doc and a ChatGPT export, branch
+and make conflicting edits to the same paragraph, show a live semantic
+diff, open a merge request and print the live merge conflict it detects,
+resolve it and confirm the result is a real two-parent merge commit (not a
+linear rewrite), have a fake "LLM agent" (an injected callable, no external
+API) open its own branch and submit a merge request for human review,
+chunk and embed everything with local sentence-transformers, answer a
+natural-language question via pgvector similarity search, and record and
+walk a provenance edge from the answer back to its source. Every step
+asserts on the real result rather than just printing it, so a failure
+anywhere raises an `AssertionError` instead of silently reporting success.
+
 ## What was completed versus not
 
 Every module below was built with real, passing automated tests
@@ -176,6 +196,9 @@ assumed from the plan:
    this repo calls them after ingestion or after a commit lands. Even once
    the FastAPI route layer above exists, semantic search has no data to
    search until something wires ingestion/commit events to these functions.
+   (`scripts/demo.py` calls all of these directly and proves they work
+   correctly in isolation — the gap is specifically the missing production
+   *wiring*, not the functions themselves.)
 7. **The `Artifact` table is never populated.** `app/db/models.py` defines
    `Artifact`, but no code anywhere creates an `Artifact` row — every
    `artifact_id` used throughout the versioning, collaboration, and
