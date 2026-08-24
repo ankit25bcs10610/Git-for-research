@@ -1,5 +1,5 @@
 import tree_sitter_python
-from tree_sitter import Language, Node, Parser
+from tree_sitter import Language, Parser
 
 _LANGUAGES = {
     "python": Language(tree_sitter_python.language()),
@@ -18,17 +18,14 @@ def _extract_definitions(source: str, language: str) -> dict:
     tree = parser.parse(source_bytes)
     definitions = {}
 
-    def walk(node: Node) -> None:
-        for child in node.children:
-            if child.type in _DEFINITION_NODE_TYPES:
-                name_node = child.child_by_field_name("name")
-                if name_node is not None:
-                    name = source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8")
-                    text = source_bytes[child.start_byte:child.end_byte].decode("utf-8")
-                    definitions[name] = {"node_type": child.type, "text": text}
-            walk(child)
+    for child in tree.root_node.children:
+        if child.type in _DEFINITION_NODE_TYPES:
+            name_node = child.child_by_field_name("name")
+            if name_node is not None:
+                name = source_bytes[name_node.start_byte:name_node.end_byte].decode("utf-8")
+                text = source_bytes[child.start_byte:child.end_byte].decode("utf-8")
+                definitions[name] = {"node_type": child.type, "text": text}
 
-    walk(tree.root_node)
     return definitions
 
 
