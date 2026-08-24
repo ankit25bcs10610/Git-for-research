@@ -100,3 +100,27 @@ class GitVersionedArtifact:
 
         walk(commit.tree)
         return result
+
+    def merge(self, base_ref: str, ours_ref: str, theirs_ref: str) -> dict:
+        base_commit = self._resolve_commit(base_ref)
+        ours_commit = self._resolve_commit(ours_ref)
+        theirs_commit = self._resolve_commit(theirs_ref)
+
+        merge_index = self.repo.merge_trees(
+            base_commit.tree, ours_commit.tree, theirs_commit.tree
+        )
+
+        merge_tree_id = merge_index.write_tree(self.repo)
+        signature = pygit2.Signature("system", "system@local")
+        merge_commit_id = self.repo.create_commit(
+            None,
+            signature,
+            signature,
+            f"merge {theirs_ref} into {ours_ref}",
+            merge_tree_id,
+            [ours_commit.id, theirs_commit.id],
+        )
+        ours_branch = self.repo.branches.local.get(ours_ref)
+        if ours_branch is not None:
+            ours_branch.set_target(merge_commit_id)
+        return {"merged": True, "conflicts": []}

@@ -99,3 +99,27 @@ def test_get_content_returns_all_blobs_at_a_commit():
     content = artifact.get_content(commit_id)
 
     assert content == {"a.txt": "content a\n", "b.txt": "content b\n"}
+
+
+def test_merge_without_conflicts_combines_both_branches_edits():
+    repo_path = tempfile.mkdtemp()
+    init_repo_from_files(
+        repo_path, {"a.txt": "content a\n", "b.txt": "content b\n"}
+    )
+    artifact = GitVersionedArtifact(repo_path)
+    artifact.branch("feature", "master")
+    base_ref = artifact.branch_head("feature")
+
+    artifact.checkout_branch("feature")
+    artifact.commit({"a.txt": "content a edited on feature\n"}, "user-1", "edit a on feature")
+
+    artifact.checkout_branch("master")
+    artifact.commit({"b.txt": "content b edited on master\n"}, "user-1", "edit b on master")
+
+    result = artifact.merge(base_ref, "master", "feature")
+
+    assert result["merged"] is True
+    assert result["conflicts"] == []
+    merged_content = artifact.get_content("master")
+    assert merged_content["a.txt"] == "content a edited on feature\n"
+    assert merged_content["b.txt"] == "content b edited on master\n"
