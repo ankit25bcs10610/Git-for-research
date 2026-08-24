@@ -1,7 +1,10 @@
 import uuid
 
+import pytest
+from sqlalchemy.exc import IntegrityError
+
 from app.db.base import get_session
-from app.db.models import Blob
+from app.db.models import Blob, Branch
 from app.versioning.dag_store import (
     create_blob,
     get_blob_content,
@@ -211,3 +214,77 @@ def test_update_branch_head_cas_fails_and_leaves_head_unchanged_when_expected_is
 
         assert result is False
         assert get_branch_head(session, artifact_id=artifact_id, name=branch_name) == second_commit_id
+
+
+def test_create_branch_raises_on_duplicate_artifact_and_branch_name(db_session):
+    """Regression test for Finding C3.
+
+    A plain sequential double-submit (e.g. a double-click) must not create
+    a second Branch row for the same (artifact_id, name) -- that used to
+    make every later get_branch_head/update_branch_head for that
+    artifact+branch raise MultipleResultsFound permanently, with no
+    recovery path. create_branch's own existence guard must now reject the
+    second call with a clear error rather than silently inserting a
+    duplicate.
+    """
+    artifact_id = str(uuid.uuid4())
+    branch_name = "main"
+
+    blob_hash = create_blob(db_session, f"root content {uuid.uuid4()}")
+    commit_id = create_commit(
+        db_session,
+        artifact_id=artifact_id,
+        blob_hash=blob_hash,
+        parent_ids=[],
+        author="user-1",
+        message="initial commit",
+    )
+
+    create_branch(db_session, artifact_id=artifact_id, name=branch_name, head_commit_id=commit_id)
+
+    with pytest.raises(ValueError):
+        create_branch(db_session, artifact_id=artifact_id, name=branch_name, head_commit_id=commit_id)
+
+    # Exactly one Branch row for this (artifact_id, name) -- no duplicate
+    # was silently inserted by the second call.
+    rows = (
+        db_session.query(Branch)
+        .filter_by(artifact_id=artifact_id, name=branch_name)
+        .all()
+    )
+    assert len(rows) == 1
+
+
+def test_branch_unique_constraint_rejects_duplicate_row_at_db_level(db_session):
+    """Regression test for Finding C3.
+
+    Proves the DB-level unique constraint (uq_branch_artifact_name) itself
+    is the real backstop, not just create_branch's application-level guard.
+    Bypasses create_branch entirely and inserts a second Branch row directly
+    via the model, simulating a race that slips past an application-level
+    check -- this must be rejected by the database with IntegrityError.
+    """
+    artifact_id = str(uuid.uuid4())
+    branch_name = "main"
+
+    first = Branch(
+        id=str(uuid.uuid4()),
+        artifact_id=artifact_id,
+        name=branch_name,
+        head_commit_id="commit-a",
+    )
+    db_session.add(first)
+    db_session.commit()
+
+    second = Branch(
+        id=str(uuid.uuid4()),
+        artifact_id=artifact_id,
+        name=branch_name,
+        head_commit_id="commit-b",
+    )
+    db_session.add(second)
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+    # Leave the session in a usable state for the fixture's own teardown.
+    db_session.rollback()

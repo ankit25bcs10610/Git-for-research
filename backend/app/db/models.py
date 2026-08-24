@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, DateTime, Integer, String
+from sqlalchemy import JSON, DateTime, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -42,6 +42,7 @@ class Commit(Base):
 
 class Branch(Base):
     __tablename__ = "branches"
+    __table_args__ = (UniqueConstraint("artifact_id", "name", name="uq_branch_artifact_name"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     artifact_id: Mapped[str] = mapped_column(String)

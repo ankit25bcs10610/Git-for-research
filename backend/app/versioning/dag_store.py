@@ -53,6 +53,23 @@ def get_commit(session, commit_id: str) -> Commit:
 
 
 def create_branch(session, artifact_id: str, name: str, head_commit_id: str) -> None:
+    # Guard against an ordinary sequential double-submit (e.g. a double
+    # click) creating a second Branch row for the same (artifact_id, name):
+    # without this check, every later get_branch_head/update_branch_head for
+    # that artifact+branch would raise MultipleResultsFound permanently. The
+    # `branches` table also has a DB-level unique constraint on
+    # (artifact_id, name) (see app.db.models.Branch) as the real backstop for
+    # genuinely concurrent inserts that race past this application-level
+    # check; this ValueError follows the same "raise a clear error" style as
+    # update_branch_head's not-found case below.
+    existing = (
+        session.query(Branch)
+        .filter_by(artifact_id=artifact_id, name=name)
+        .one_or_none()
+    )
+    if existing is not None:
+        raise ValueError(f"branch '{name}' already exists for artifact {artifact_id}")
+
     branch = Branch(
         id=str(uuid.uuid4()),
         artifact_id=artifact_id,
