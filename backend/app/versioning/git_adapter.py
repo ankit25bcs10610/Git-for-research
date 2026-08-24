@@ -110,6 +110,32 @@ class GitVersionedArtifact:
             base_commit.tree, ours_commit.tree, theirs_commit.tree
         )
 
+        if merge_index.conflicts is not None:
+            conflicts = []
+            for ancestor, ours, theirs in merge_index.conflicts:
+                path = None
+                ours_text = None
+                theirs_text = None
+                base_text = None
+                if ours is not None:
+                    path = ours.path
+                    ours_text = self.repo[ours.id].data.decode("utf-8")
+                if theirs is not None:
+                    path = path or theirs.path
+                    theirs_text = self.repo[theirs.id].data.decode("utf-8")
+                if ancestor is not None:
+                    path = path or ancestor.path
+                    base_text = self.repo[ancestor.id].data.decode("utf-8")
+                conflicts.append(
+                    {
+                        "path": path,
+                        "ours": ours_text,
+                        "theirs": theirs_text,
+                        "base": base_text,
+                    }
+                )
+            return {"merged": False, "conflicts": conflicts}
+
         merge_tree_id = merge_index.write_tree(self.repo)
         signature = pygit2.Signature("system", "system@local")
         merge_commit_id = self.repo.create_commit(
