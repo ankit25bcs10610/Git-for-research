@@ -37,3 +37,28 @@ def test_commit_writes_new_file_and_returns_commit_id():
     assert isinstance(commit_id, str)
     assert len(commit_id) == 40
     assert open(os.path.join(repo_path, "a.txt")).read() == "content a changed\n"
+
+
+def test_diff_reports_added_removed_and_modified_paths():
+    repo_path = tempfile.mkdtemp()
+    init_repo_from_files(
+        repo_path, {"a.txt": "content a\n", "b.txt": "content b\n"}
+    )
+    artifact = GitVersionedArtifact(repo_path)
+    first_commit = artifact.commit(None, "user-1", "noop")
+
+    os.remove(os.path.join(repo_path, "b.txt"))
+    second_commit = artifact.commit(
+        {"a.txt": "content a changed\n", "c.txt": "content c\n"},
+        "user-1",
+        "modify a, add c, remove b",
+    )
+
+    changes = artifact.diff(first_commit, second_commit)
+    changes_by_path = {change["path"]: change["status"] for change in changes}
+
+    assert changes_by_path == {
+        "a.txt": "modified",
+        "b.txt": "removed",
+        "c.txt": "added",
+    }

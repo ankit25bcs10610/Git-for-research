@@ -2,6 +2,12 @@ import os
 
 import pygit2
 
+_STATUS_MAP = {
+    pygit2.GIT_DELTA_ADDED: "added",
+    pygit2.GIT_DELTA_DELETED: "removed",
+    pygit2.GIT_DELTA_MODIFIED: "modified",
+}
+
 
 def init_repo_from_files(repo_path: str, files: dict) -> None:
     os.makedirs(repo_path, exist_ok=True)
@@ -48,3 +54,20 @@ class GitVersionedArtifact:
             ref_name, signature, signature, message, tree, parents
         )
         return str(new_commit_id)
+
+    def _resolve_commit(self, ref: str):
+        branch = self.repo.branches.local.get(ref)
+        if branch is not None:
+            return self.repo[branch.target]
+        return self.repo[pygit2.Oid(hex=ref)]
+
+    def diff(self, ref_a: str, ref_b: str) -> list:
+        commit_a = self._resolve_commit(ref_a)
+        commit_b = self._resolve_commit(ref_b)
+        tree_diff = self.repo.diff(commit_a.tree, commit_b.tree)
+        results = []
+        for patch in tree_diff.deltas:
+            status = _STATUS_MAP.get(patch.status, "modified")
+            path = patch.new_file.path if patch.new_file.path else patch.old_file.path
+            results.append({"path": path, "status": status})
+        return results
