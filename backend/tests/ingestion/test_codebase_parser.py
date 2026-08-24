@@ -30,3 +30,20 @@ def test_parse_codebase_zip_extracts_text_and_skips_binary():
         "README.md": "# Sample Project\n",
     }
     assert "data.bin" not in artifact.content
+
+
+def test_parse_codebase_zip_derives_name_from_top_level_directory():
+    zip_bytes = _build_zip_bytes(
+        {
+            "sample_repo/main.py": b"print('hi')\n",
+            "sample_repo/lib/util.py": b"def util():\n    return 1\n",
+        }
+    )
+
+    artifact = parse_codebase_zip(zip_bytes)
+
+    assert artifact.name == "sample_repo"
+    assert artifact.content == {
+        "sample_repo/main.py": "print('hi')\n",
+        "sample_repo/lib/util.py": "def util():\n    return 1\n",
+    }

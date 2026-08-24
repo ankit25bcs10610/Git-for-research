@@ -1,8 +1,20 @@
 import io
 import zipfile
-from typing import Dict
+from typing import Dict, Iterable
 
 from app.ingestion.base import ParsedArtifact
+
+
+def _derive_top_level_name(paths: Iterable[str], fallback: str = "codebase") -> str:
+    top_levels = set()
+    for path in paths:
+        normalized = path.replace("\\", "/")
+        parts = normalized.split("/")
+        if len(parts) > 1 and parts[0]:
+            top_levels.add(parts[0])
+    if len(top_levels) == 1:
+        return top_levels.pop()
+    return fallback
 
 
 def parse_codebase_zip(zip_bytes: bytes) -> ParsedArtifact:
@@ -18,4 +30,5 @@ def parse_codebase_zip(zip_bytes: bytes) -> ParsedArtifact:
             except UnicodeDecodeError:
                 continue
             files[entry.filename] = text
-    return ParsedArtifact(artifact_type="codebase", name="codebase", content=files)
+        name = _derive_top_level_name(archive.namelist())
+    return ParsedArtifact(artifact_type="codebase", name=name, content=files)
