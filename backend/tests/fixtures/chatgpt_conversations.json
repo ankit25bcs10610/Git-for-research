@@ -1,0 +1,53 @@
+[
+  {
+    "title": "Reversing a string",
+    "mapping": {
+      "root": {
+        "id": "root",
+        "message": null,
+        "parent": null,
+        "children": ["n1"]
+      },
+      "n1": {
+        "id": "n1",
+        "message": {
+          "author": {"role": "user"},
+          "content": {"parts": ["How do I reverse a string in Python?"]},
+          "create_time": 1000.0
+        },
+        "parent": "root",
+        "children": ["alt2", "n2"]
+      },
+      "alt2": {
+        "id": "alt2",
+        "message": {
+          "author": {"role": "assistant"},
+          "content": {"parts": ["Use reversed(s)."]},
+          "create_time": 1001.0
+        },
+        "parent": "n1",
+        "children": []
+      },
+      "n2": {
+        "id": "n2",
+        "message": {
+          "author": {"role": "assistant"},
+          "content": {"parts": ["You can use s[::-1] to reverse a string."]},
+          "create_time": 1002.0
+        },
+        "parent": "n1",
+        "children": ["n3"]
+      },
+      "n3": {
+        "id": "n3",
+        "message": {
+          "author": {"role": "user"},
+          "content": {"parts": ["Great, thanks!"]},
+          "create_time": 1003.0
+        },
+        "parent": "n2",
+        "children": []
+      }
+    }
+  }
+]
