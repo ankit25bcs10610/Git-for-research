@@ -8,7 +8,7 @@ from app.versioning.dag_store import (
     get_branch_head,
     get_commit,
 )
-from app.versioning.diff_engine import diff_tokens, diff_words
+from app.versioning.diff_engine import diff_tokens, diff_words, tokenize_paragraphs
 from app.versioning.interface import VersionedArtifact
 from app.versioning.merge_engine import diff3_merge
 
@@ -61,7 +61,15 @@ class DagVersionedArtifact(VersionedArtifact):
         ours_tokens = self.tokenizer(ours_content)
         theirs_tokens = self.tokenizer(theirs_content)
         result = diff3_merge(base_tokens, ours_tokens, theirs_tokens)
-        if len(result["conflicts"]) == 0:
+        # Auto-committing the merge result is only supported when this
+        # adapter tokenizes on paragraphs, because the paragraph tokenizer's
+        # join separator ("\n\n") round-trips cleanly back into the original
+        # text shape. When this adapter is wired up with the message
+        # tokenizer instead, this method intentionally stops after
+        # diff3_merge and hands the raw result back to the caller, which
+        # resolves message merges through the merge_request UI rather than
+        # an automatic commit.
+        if len(result["conflicts"]) == 0 and self.tokenizer is tokenize_paragraphs:
             ours_commit_id = self._resolve_commit_id(ours_ref)
             theirs_commit_id = self._resolve_commit_id(theirs_ref)
             merged_content = "\n\n".join(result["merged_tokens"])

@@ -1,10 +1,12 @@
+import json
 import uuid
 
 import pytest
 from sqlalchemy import text
 
 from app.versioning.dag_adapter import DagVersionedArtifact
-from app.versioning.diff_engine import tokenize_paragraphs
+from app.versioning.dag_store import update_branch_head
+from app.versioning.diff_engine import tokenize_messages, tokenize_paragraphs
 
 
 @pytest.fixture
@@ -63,9 +65,6 @@ def test_diff_of_a_changed_paragraph_includes_word_diff(db_session, artifact_id)
     assert changed[0]["word_diff"]
 
 
-from app.versioning.dag_store import update_branch_head
-
-
 def test_merge_with_no_conflicts_creates_a_merge_commit_with_both_changes(
     db_session, artifact_id
 ):
@@ -101,3 +100,30 @@ def test_merge_with_no_conflicts_creates_a_merge_commit_with_both_changes(
     merged_content = artifact.get_content(result["merge_commit_id"])
     assert "Paragraph one changed on main." in merged_content
     assert "Paragraph two changed on branch." in merged_content
+
+
+def test_merge_with_message_tokenizer_does_not_auto_commit(db_session, artifact_id):
+    # tokenize_messages already does json.loads(content_json) internally
+    # (see app/versioning/diff_engine.py), so it is passed straight through
+    # as the tokenizer rather than wrapped in something that parses JSON a
+    # second time.
+    artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_messages)
+    base_json = [{"role": "user", "text": "hi"}, {"role": "assistant", "text": "hello"}]
+    ours_json = [
+        {"role": "user", "text": "hi there"},
+        {"role": "assistant", "text": "hello"},
+    ]
+    theirs_json = [
+        {"role": "user", "text": "hi"},
+        {"role": "assistant", "text": "hello friend"},
+    ]
+    base_commit = artifact.commit(json.dumps(base_json), "user-1", "init", None)
+    ours_commit = artifact.commit(json.dumps(ours_json), "user-1", "ours", base_commit)
+    theirs_commit = artifact.commit(
+        json.dumps(theirs_json), "user-1", "theirs", base_commit
+    )
+
+    result = artifact.merge(base_commit, ours_commit, theirs_commit)
+
+    assert result["conflicts"] == []
+    assert "merge_commit_id" not in result
