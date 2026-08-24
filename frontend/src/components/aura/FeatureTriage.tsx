@@ -32,7 +32,7 @@ const categories = [
 
 export default function FeatureTriage() {
   return (
-    <section className="max-w-6xl mx-auto px-6 py-20 md:py-28">
+    <section id="solutions" className="max-w-6xl mx-auto px-6 py-20 md:py-28">
       <div className="grid md:grid-cols-2 gap-10 md:gap-16 items-start">
         <motion.div
           initial={{ y: 20, opacity: 0 }}

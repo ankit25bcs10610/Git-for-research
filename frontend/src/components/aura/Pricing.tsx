@@ -56,7 +56,7 @@ export default function Pricing() {
   const [yearly, setYearly] = useState(false);
 
   return (
-    <section className="c3-pricing-section">
+    <section id="pricing" className="c3-pricing-section">
       <svg width="0" height="0" style={{ position: "absolute" }}>
         <defs>
           <filter id="c3-noise">
