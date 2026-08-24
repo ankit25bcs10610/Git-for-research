@@ -121,3 +121,93 @@ def test_update_branch_head_updates_pointer():
         update_branch_head(session, artifact_id=artifact_id, name=branch_name, new_commit_id=second_commit_id)
 
         assert get_branch_head(session, artifact_id=artifact_id, name=branch_name) == second_commit_id
+
+
+def test_update_branch_head_cas_succeeds_when_expected_matches_current_head():
+    artifact_id = str(uuid.uuid4())
+    branch_name = f"main-{uuid.uuid4()}"
+
+    with get_session() as session:
+        first_blob_hash = create_blob(session, f"first content {uuid.uuid4()}")
+        first_commit_id = create_commit(
+            session,
+            artifact_id=artifact_id,
+            blob_hash=first_blob_hash,
+            parent_ids=[],
+            author="user-1",
+            message="first commit",
+        )
+        create_branch(session, artifact_id=artifact_id, name=branch_name, head_commit_id=first_commit_id)
+
+        second_blob_hash = create_blob(session, f"second content {uuid.uuid4()}")
+        second_commit_id = create_commit(
+            session,
+            artifact_id=artifact_id,
+            blob_hash=second_blob_hash,
+            parent_ids=[first_commit_id],
+            author="user-1",
+            message="second commit",
+        )
+
+        result = update_branch_head(
+            session,
+            artifact_id=artifact_id,
+            name=branch_name,
+            new_commit_id=second_commit_id,
+            expected_commit_id=first_commit_id,
+        )
+
+        assert result is True
+        assert get_branch_head(session, artifact_id=artifact_id, name=branch_name) == second_commit_id
+
+
+def test_update_branch_head_cas_fails_and_leaves_head_unchanged_when_expected_is_stale():
+    artifact_id = str(uuid.uuid4())
+    branch_name = f"main-{uuid.uuid4()}"
+
+    with get_session() as session:
+        first_blob_hash = create_blob(session, f"first content {uuid.uuid4()}")
+        first_commit_id = create_commit(
+            session,
+            artifact_id=artifact_id,
+            blob_hash=first_blob_hash,
+            parent_ids=[],
+            author="user-1",
+            message="first commit",
+        )
+        create_branch(session, artifact_id=artifact_id, name=branch_name, head_commit_id=first_commit_id)
+
+        # Someone else already moved the head to `second_commit_id`...
+        second_blob_hash = create_blob(session, f"second content {uuid.uuid4()}")
+        second_commit_id = create_commit(
+            session,
+            artifact_id=artifact_id,
+            blob_hash=second_blob_hash,
+            parent_ids=[first_commit_id],
+            author="user-1",
+            message="second commit",
+        )
+        update_branch_head(session, artifact_id=artifact_id, name=branch_name, new_commit_id=second_commit_id)
+
+        # ...so a stale writer that still expects `first_commit_id` must lose
+        # the race rather than clobber the branch.
+        third_blob_hash = create_blob(session, f"third content {uuid.uuid4()}")
+        third_commit_id = create_commit(
+            session,
+            artifact_id=artifact_id,
+            blob_hash=third_blob_hash,
+            parent_ids=[first_commit_id],
+            author="user-1",
+            message="third commit",
+        )
+
+        result = update_branch_head(
+            session,
+            artifact_id=artifact_id,
+            name=branch_name,
+            new_commit_id=third_commit_id,
+            expected_commit_id=first_commit_id,
+        )
+
+        assert result is False
+        assert get_branch_head(session, artifact_id=artifact_id, name=branch_name) == second_commit_id

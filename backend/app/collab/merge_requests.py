@@ -74,6 +74,9 @@ def get_merge_request_diff(session, mr_id: str) -> dict:
 
 def merge_merge_request(session, mr_id: str, resolutions=None) -> bool:
     mr = session.get(MergeRequest, mr_id)
+    if mr.status != "open":
+        return False
+
     artifact = DagVersionedArtifact(session, mr.artifact_id, _paragraph_tokenizer)
 
     diff_result = get_merge_request_diff(session, mr_id)
@@ -89,6 +92,9 @@ def merge_merge_request(session, mr_id: str, resolutions=None) -> bool:
         merge_result = artifact.merge(mr.base_commit_ref, target_head, source_head)
         merge_commit_id = merge_result["merge_commit_id"]
     else:
+        conflict_positions = {c["position"] for c in conflicts}
+        if set(resolutions.keys()) != conflict_positions:
+            return False
         merged_tokens = list(diff_result["merged_tokens"])
         for position, resolved_text in resolutions.items():
             merged_tokens[position] = resolved_text
@@ -97,7 +103,10 @@ def merge_merge_request(session, mr_id: str, resolutions=None) -> bool:
             merge_content, "user-1", "resolve merge conflicts", target_head
         )
 
-    update_branch_head(session, mr.artifact_id, mr.target_branch, merge_commit_id)
+    if not update_branch_head(
+        session, mr.artifact_id, mr.target_branch, merge_commit_id, expected_commit_id=target_head
+    ):
+        return False
     mr.status = "merged"
     session.commit()
     return True
@@ -105,5 +114,7 @@ def merge_merge_request(session, mr_id: str, resolutions=None) -> bool:
 
 def reject_merge_request(session, mr_id: str) -> None:
     mr = session.get(MergeRequest, mr_id)
+    if mr.status != "open":
+        return
     mr.status = "rejected"
     session.commit()

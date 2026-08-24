@@ -74,13 +74,30 @@ def get_branch_head(session, artifact_id: str, name: str) -> str:
     return branch.head_commit_id
 
 
-def update_branch_head(session, artifact_id: str, name: str, new_commit_id: str) -> None:
-    branch = (
-        session.query(Branch)
-        .filter_by(artifact_id=artifact_id, name=name)
-        .one_or_none()
-    )
+def update_branch_head(
+    session, artifact_id: str, name: str, new_commit_id: str, expected_commit_id: str = None
+) -> bool:
+    query = session.query(Branch).filter_by(artifact_id=artifact_id, name=name)
+    if expected_commit_id is not None:
+        # Atomic compare-and-swap: a single UPDATE ... WHERE head_commit_id =
+        # expected_commit_id statement, so the check-and-set is enforced by
+        # the database itself rather than by this ORM code reading the
+        # branch, comparing in Python, and writing back -- which would leave
+        # the same read-then-write race the CAS is meant to close.
+        rows_matched = query.filter_by(head_commit_id=expected_commit_id).update(
+            {"head_commit_id": new_commit_id}, synchronize_session=False
+        )
+        session.commit()
+        if rows_matched == 0:
+            existing = session.query(Branch).filter_by(artifact_id=artifact_id, name=name).one_or_none()
+            if existing is None:
+                raise ValueError(f"branch '{name}' not found for artifact {artifact_id}")
+            return False
+        return True
+
+    branch = query.one_or_none()
     if branch is None:
         raise ValueError(f"branch '{name}' not found for artifact {artifact_id}")
     branch.head_commit_id = new_commit_id
     session.commit()
+    return True
