@@ -1,7 +1,7 @@
 import { motion } from 'motion/react'
 import { AppleButton, gradientStyle } from './primitives'
 
-export default function Hero() {
+export default function Hero({ onOpenWaitlist }: { onOpenWaitlist: () => void }) {
   return (
     <section className="pt-16 md:pt-28 pb-20 text-center flex flex-col items-center">
       <motion.h1
@@ -30,7 +30,7 @@ export default function Hero() {
         transition={{ delay: 0.7, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         className="mt-10 flex flex-col items-center gap-3"
       >
-        <AppleButton />
+        <AppleButton onClick={onOpenWaitlist} />
         <span className="text-xs text-white/40">Download for Intel / Apple Silicon</span>
       </motion.div>
     </section>

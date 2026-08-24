@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import Navbar from './components/aura/Navbar'
 import Hero from './components/aura/Hero'
 import MenuBarStrip from './components/aura/MenuBarStrip'
@@ -7,8 +8,11 @@ import LogoCloud from './components/aura/LogoCloud'
 import Testimonials from './components/aura/Testimonials'
 import Pricing from './components/aura/Pricing'
 import FinalCTA from './components/aura/FinalCTA'
+import WaitlistModal, { type WaitlistContext } from './components/aura/WaitlistModal'
 
 function App() {
+  const [waitlistContext, setWaitlistContext] = useState<WaitlistContext | null>(null)
+
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#0c0c0c] text-white">
       <svg width="0" height="0" style={{ position: 'absolute' }}>
@@ -40,16 +44,18 @@ function App() {
       <div className="hidden md:block pointer-events-none fixed inset-y-0 left-1/2 translate-x-[calc(-50%+36rem)] w-px bg-white/10 z-[5]" />
 
       <div className="relative z-10">
-        <Navbar />
-        <Hero />
+        <Navbar onOpenWaitlist={() => setWaitlistContext({ source: 'download' })} />
+        <Hero onOpenWaitlist={() => setWaitlistContext({ source: 'download' })} />
         <MenuBarStrip />
         <InboxMockup />
         <FeatureTriage />
         <LogoCloud />
         <Testimonials />
-        <Pricing />
-        <FinalCTA />
+        <Pricing onOpenWaitlist={(plan) => setWaitlistContext({ source: 'plan', plan })} />
+        <FinalCTA onOpenWaitlist={(source) => setWaitlistContext({ source })} />
       </div>
+
+      <WaitlistModal context={waitlistContext} onClose={() => setWaitlistContext(null)} />
     </div>
   )
 }

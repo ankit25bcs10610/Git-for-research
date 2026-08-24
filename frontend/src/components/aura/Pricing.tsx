@@ -52,7 +52,7 @@ const plans: Plan[] = [
   },
 ];
 
-export default function Pricing() {
+export default function Pricing({ onOpenWaitlist }: { onOpenWaitlist: (plan: string) => void }) {
   const [yearly, setYearly] = useState(false);
 
   return (
@@ -107,7 +107,9 @@ export default function Pricing() {
                 </li>
               ))}
             </ul>
-            <button className="c3-btn">Choose Plan</button>
+            <button className="c3-btn" onClick={() => onOpenWaitlist(plan.tier)}>
+              Choose Plan
+            </button>
           </div>
         ))}
       </div>

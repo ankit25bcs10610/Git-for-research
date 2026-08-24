@@ -15,7 +15,7 @@ const NAV_LINKS: { label: string; href: string }[] = [
   { label: 'Careers', href: '#' },
 ]
 
-export default function Navbar() {
+export default function Navbar({ onOpenWaitlist }: { onOpenWaitlist: () => void }) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
@@ -43,7 +43,7 @@ export default function Navbar() {
       </nav>
 
       <div className="hidden md:block">
-        <AppleButton label="Downloada" />
+        <AppleButton label="Downloada" onClick={onOpenWaitlist} />
       </div>
 
       <button
@@ -74,7 +74,14 @@ export default function Navbar() {
               </a>
             ))}
             <div className="mt-2">
-              <AppleButton label="Downloada" full />
+              <AppleButton
+                label="Downloada"
+                full
+                onClick={() => {
+                  setMobileOpen(false)
+                  onOpenWaitlist()
+                }}
+              />
             </div>
           </motion.div>
         )}

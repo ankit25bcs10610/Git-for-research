@@ -2,7 +2,7 @@ import { motion } from 'motion/react'
 import { ChevronRight } from 'lucide-react'
 import { AppleButton } from './primitives'
 
-export default function FinalCTA() {
+export default function FinalCTA({ onOpenWaitlist }: { onOpenWaitlist: (source: 'download' | 'sales') => void }) {
   return (
     <section className="max-w-6xl mx-auto px-6 py-20 md:py-32">
       <motion.div
@@ -30,8 +30,11 @@ export default function FinalCTA() {
             an obligation.
           </p>
           <div className="flex items-center justify-center gap-4 mt-8">
-            <AppleButton label="Download Aura" />
-            <button className="rounded-full border border-white/15 text-white text-sm font-medium px-5 py-3 hover:bg-white/5">
+            <AppleButton label="Download Aura" onClick={() => onOpenWaitlist('download')} />
+            <button
+              onClick={() => onOpenWaitlist('sales')}
+              className="rounded-full border border-white/15 text-white text-sm font-medium px-5 py-3 hover:bg-white/5"
+            >
               Talk to sales
               <ChevronRight className="w-4 h-4" />
             </button>
