@@ -2,11 +2,11 @@
   "name": "crdt-relay",
   "version": "1.0.0",
   "private": true,
-  "description": "CRDT sync relay for Git for Research",
+  "description": "Yjs CRDT relay and snapshot bridge for Git for Research",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --check server.js"
+    "test": "node --test relay.test.js"
   },
   "dependencies": {
     "ws": "^8.16.0",
