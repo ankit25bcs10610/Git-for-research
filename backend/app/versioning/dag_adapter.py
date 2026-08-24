@@ -10,6 +10,7 @@ from app.versioning.dag_store import (
 )
 from app.versioning.diff_engine import diff_tokens, diff_words
 from app.versioning.interface import VersionedArtifact
+from app.versioning.merge_engine import diff3_merge
 
 
 class DagVersionedArtifact(VersionedArtifact):
@@ -51,6 +52,32 @@ class DagVersionedArtifact(VersionedArtifact):
     def branch(self, name: str, from_ref: str) -> None:
         commit_id = self._resolve_commit_id(from_ref)
         create_branch(self.session, self.artifact_id, name, commit_id)
+
+    def merge(self, base_ref: str, ours_ref: str, theirs_ref: str) -> Dict:
+        base_content = self.get_content(base_ref)
+        ours_content = self.get_content(ours_ref)
+        theirs_content = self.get_content(theirs_ref)
+        base_tokens = self.tokenizer(base_content)
+        ours_tokens = self.tokenizer(ours_content)
+        theirs_tokens = self.tokenizer(theirs_content)
+        result = diff3_merge(base_tokens, ours_tokens, theirs_tokens)
+        if len(result["conflicts"]) == 0:
+            ours_commit_id = self._resolve_commit_id(ours_ref)
+            theirs_commit_id = self._resolve_commit_id(theirs_ref)
+            merged_content = "\n\n".join(result["merged_tokens"])
+            blob_hash = create_blob(self.session, merged_content)
+            # dag_store.create_commit returns the new commit's id directly as
+            # a str, not an object with a `.id` attribute.
+            merge_commit_id = create_commit(
+                self.session,
+                self.artifact_id,
+                blob_hash,
+                [ours_commit_id, theirs_commit_id],
+                "merge-bot",
+                f"Merge {theirs_ref} into {ours_ref}",
+            )
+            result["merge_commit_id"] = merge_commit_id
+        return result
 
     def get_content(self, ref: str) -> str:
         commit_id = self._resolve_commit_id(ref)

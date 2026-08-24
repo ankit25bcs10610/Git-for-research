@@ -61,3 +61,43 @@ def test_diff_of_a_changed_paragraph_includes_word_diff(db_session, artifact_id)
     assert changed[0]["text"] == "Paragraph two updated."
     assert "word_diff" in changed[0]
     assert changed[0]["word_diff"]
+
+
+from app.versioning.dag_store import update_branch_head
+
+
+def test_merge_with_no_conflicts_creates_a_merge_commit_with_both_changes(
+    db_session, artifact_id
+):
+    artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
+    base_commit = artifact.commit(
+        "Paragraph one.\n\nParagraph two.", "user-1", "init", None
+    )
+    artifact.branch("feature", base_commit)
+
+    branch_commit = artifact.commit(
+        "Paragraph one.\n\nParagraph two changed on branch.",
+        "user-1",
+        "branch edit",
+        base_commit,
+    )
+    update_branch_head(db_session, artifact_id, "feature", branch_commit)
+
+    main_commit = artifact.commit(
+        "Paragraph one changed on main.\n\nParagraph two.",
+        "user-1",
+        "main edit",
+        base_commit,
+    )
+
+    result = artifact.merge(
+        base_ref=base_commit,
+        ours_ref=main_commit,
+        theirs_ref=artifact.branch_head("feature"),
+    )
+
+    assert result["conflicts"] == []
+    assert "merge_commit_id" in result
+    merged_content = artifact.get_content(result["merge_commit_id"])
+    assert "Paragraph one changed on main." in merged_content
+    assert "Paragraph two changed on branch." in merged_content
