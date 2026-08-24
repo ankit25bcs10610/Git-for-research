@@ -84,3 +84,19 @@ class GitVersionedArtifact:
         branch_ref = self.repo.branches.local[name]
         self.repo.set_head(branch_ref.name)
         self.repo.checkout(branch_ref, strategy=pygit2.GIT_CHECKOUT_FORCE)
+
+    def get_content(self, ref: str) -> dict:
+        commit = self._resolve_commit(ref)
+        result = {}
+
+        def walk(tree, prefix=""):
+            for entry in tree:
+                full_path = prefix + entry.name
+                obj = self.repo[entry.id]
+                if isinstance(obj, pygit2.Tree):
+                    walk(obj, full_path + "/")
+                else:
+                    result[full_path] = obj.data.decode("utf-8")
+
+        walk(commit.tree)
+        return result

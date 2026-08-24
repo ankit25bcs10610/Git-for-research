@@ -86,3 +86,16 @@ def test_checkout_branch_switches_head_and_working_tree():
 
     assert artifact.repo.head.shorthand == "feature"
     assert open(os.path.join(repo_path, "a.txt")).read() == "content a\n"
+
+
+def test_get_content_returns_all_blobs_at_a_commit():
+    repo_path = tempfile.mkdtemp()
+    init_repo_from_files(
+        repo_path, {"a.txt": "content a\n", "b.txt": "content b\n"}
+    )
+    artifact = GitVersionedArtifact(repo_path)
+    commit_id = artifact.commit(None, "user-1", "noop")
+
+    content = artifact.get_content(commit_id)
+
+    assert content == {"a.txt": "content a\n", "b.txt": "content b\n"}
