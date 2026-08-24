@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fetchArtifacts, fetchDiff, fetchMergeRequest, submitResolution } from "./client";
+import { fetchArtifacts, fetchDiff, fetchMergeRequest, submitResolution, searchQuery } from "./client";
 import type { ConflictRecord } from "./client";
 
 describe("fetchArtifacts", () => {
@@ -78,5 +78,42 @@ describe("submitResolution", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ resolutions: { 0: "resolved text" } }),
     });
+  });
+});
+
+describe("searchQuery", () => {
+  beforeEach(() => {
+    global.fetch = vi.fn();
+  });
+
+  it("fetches GET /api/search with the q parameter url encoded and maps the response", async () => {
+    const mockResponse = [
+      {
+        chunk_id: "chunk-1",
+        text: "the mitochondria is the powerhouse of the cell",
+        artifact_id: "artifact-1",
+        commit_ref: "commit-abc",
+        score: 0.87,
+      },
+    ];
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => mockResponse,
+    });
+
+    const results = await searchQuery("mitochondria function");
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/search?q=mitochondria%20function")
+    );
+    expect(results).toEqual([
+      {
+        chunkId: "chunk-1",
+        text: "the mitochondria is the powerhouse of the cell",
+        artifactId: "artifact-1",
+        commitRef: "commit-abc",
+        score: 0.87,
+      },
+    ]);
   });
 });

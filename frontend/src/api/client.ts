@@ -55,3 +55,37 @@ export async function submitResolution(
     throw new Error(`submitResolution failed with status ${response.status}`);
   }
 }
+
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? "";
+
+export interface SearchResult {
+  chunkId: string;
+  text: string;
+  artifactId: string;
+  commitRef: string;
+  score: number;
+}
+
+interface RawSearchResult {
+  chunk_id: string;
+  text: string;
+  artifact_id: string;
+  commit_ref: string;
+  score: number;
+}
+
+export async function searchQuery(q: string): Promise<SearchResult[]> {
+  const encoded = encodeURIComponent(q);
+  const response = await fetch(`${API_BASE_URL}/api/search?q=${encoded}`);
+  if (!response.ok) {
+    throw new Error(`search request failed with status ${response.status}`);
+  }
+  const raw: RawSearchResult[] = await response.json();
+  return raw.map((r) => ({
+    chunkId: r.chunk_id,
+    text: r.text,
+    artifactId: r.artifact_id,
+    commitRef: r.commit_ref,
+    score: r.score,
+  }));
+}
