@@ -2,6 +2,7 @@ from typing import Callable, Dict, List, Optional
 
 from app.versioning.dag_store import (
     create_blob,
+    create_branch,
     create_commit,
     get_blob_content,
     get_branch_head,
@@ -33,10 +34,17 @@ class DagVersionedArtifact(VersionedArtifact):
         )
         return commit_id
 
+    def branch(self, name: str, from_ref: str) -> None:
+        commit_id = self._resolve_commit_id(from_ref)
+        create_branch(self.session, self.artifact_id, name, commit_id)
+
     def get_content(self, ref: str) -> str:
         commit_id = self._resolve_commit_id(ref)
         commit = get_commit(self.session, commit_id)
         return get_blob_content(self.session, commit.blob_hash)
+
+    def branch_head(self, name: str) -> str:
+        return get_branch_head(self.session, self.artifact_id, name)
 
     def _resolve_commit_id(self, ref: str) -> str:
         # `ref` may be a branch name or a direct commit id. Try it as a
