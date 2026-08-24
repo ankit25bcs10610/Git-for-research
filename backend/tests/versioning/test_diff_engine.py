@@ -1,6 +1,6 @@
 import json
 
-from app.versioning.diff_engine import diff_tokens, tokenize_messages, tokenize_paragraphs
+from app.versioning.diff_engine import diff_tokens, diff_words, tokenize_messages, tokenize_paragraphs
 
 
 def test_tokenize_paragraphs_splits_three_paragraphs():
@@ -39,3 +39,12 @@ def test_diff_tokens_added_removed_and_changed():
     result = diff_tokens(tokens_a, tokens_b)
     kinds = [entry["kind"] for entry in result]
     assert kinds == ["unchanged", "changed", "removed", "unchanged", "added"]
+
+
+def test_diff_words_shows_added_and_removed_words():
+    text_a = "the quick brown fox jumps over the lazy dog"
+    text_b = "the quick brown fox jumps swiftly over the dog"
+    result = diff_words(text_a, text_b)
+    kinds = [entry["kind"] for entry in result]
+    assert "added" in kinds
+    assert "removed" in kinds

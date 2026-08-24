@@ -41,3 +41,9 @@ def diff_tokens(tokens_a: list[str], tokens_b: list[str]) -> list[dict]:
             for token in new_tokens[pair_count:]:
                 result.append({"kind": "added", "text": token, "old_text": None})
     return result
+
+
+def diff_words(text_a: str, text_b: str) -> list[dict]:
+    words_a = text_a.split()
+    words_b = text_b.split()
+    return diff_tokens(words_a, words_b)
