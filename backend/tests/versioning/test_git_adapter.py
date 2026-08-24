@@ -73,3 +73,16 @@ def test_branch_creates_ref_pointing_at_given_commit():
     artifact.branch("feature", "master")
 
     assert artifact.branch_head("feature") == first_commit
+
+
+def test_checkout_branch_switches_head_and_working_tree():
+    repo_path = tempfile.mkdtemp()
+    init_repo_from_files(repo_path, {"a.txt": "content a\n"})
+    artifact = GitVersionedArtifact(repo_path)
+    artifact.branch("feature", "master")
+
+    artifact.commit({"a.txt": "content a on master\n"}, "user-1", "edit on master")
+    artifact.checkout_branch("feature")
+
+    assert artifact.repo.head.shorthand == "feature"
+    assert open(os.path.join(repo_path, "a.txt")).read() == "content a\n"

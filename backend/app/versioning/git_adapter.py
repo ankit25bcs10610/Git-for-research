@@ -79,3 +79,8 @@ class GitVersionedArtifact:
     def branch_head(self, name: str) -> str:
         branch_ref = self.repo.branches.local[name]
         return str(branch_ref.target)
+
+    def checkout_branch(self, name: str) -> None:
+        branch_ref = self.repo.branches.local[name]
+        self.repo.set_head(branch_ref.name)
+        self.repo.checkout(branch_ref, strategy=pygit2.GIT_CHECKOUT_FORCE)
