@@ -70,3 +70,40 @@ def get_merge_request_diff(session, mr_id: str) -> dict:
     theirs_tokens = _paragraph_tokenizer(source_content)
 
     return diff3_merge(base_tokens, ours_tokens, theirs_tokens)
+
+
+def merge_merge_request(session, mr_id: str, resolutions=None) -> bool:
+    mr = session.get(MergeRequest, mr_id)
+    artifact = DagVersionedArtifact(session, mr.artifact_id, _paragraph_tokenizer)
+
+    diff_result = get_merge_request_diff(session, mr_id)
+    conflicts = diff_result["conflicts"]
+
+    if conflicts and resolutions is None:
+        return False
+
+    target_head = artifact.branch_head(mr.target_branch)
+    source_head = artifact.branch_head(mr.source_branch)
+
+    if not conflicts:
+        merge_result = artifact.merge(mr.base_commit_ref, target_head, source_head)
+        merge_commit_id = merge_result["merge_commit_id"]
+    else:
+        merged_tokens = list(diff_result["merged_tokens"])
+        for position, resolved_text in resolutions.items():
+            merged_tokens[position] = resolved_text
+        merge_content = "\n\n".join(merged_tokens)
+        merge_commit_id = artifact.commit(
+            merge_content, "user-1", "resolve merge conflicts", target_head
+        )
+
+    update_branch_head(session, mr.artifact_id, mr.target_branch, merge_commit_id)
+    mr.status = "merged"
+    session.commit()
+    return True
+
+
+def reject_merge_request(session, mr_id: str) -> None:
+    mr = session.get(MergeRequest, mr_id)
+    mr.status = "rejected"
+    session.commit()
