@@ -2,31 +2,70 @@ version: "3.9"
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: ankane/pgvector:v0.5.1
+    container_name: gfr-postgres
     environment:
-      POSTGRES_DB: research
-      POSTGRES_USER: research
-      POSTGRES_PASSWORD: research
+      POSTGRES_USER: gfr
+      POSTGRES_PASSWORD: gfr
+      POSTGRES_DB: gfr
     ports:
       - "5432:5432"
     volumes:
+      - gfr-postgres-data:/var/lib/postgresql/data
       - ./backend/app/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gfr -d gfr"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gfr-backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://gfr:gfr@postgres:5432/gfr
+      MOCK_USER_ID: user-1
+      EMBEDDING_MODEL_NAME: sentence-transformers/all-MiniLM-L6-v2
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql://research:research@postgres:5432/research
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    volumes:
+      - gfr-artifact-store:/data/artifacts
 
   crdt-relay:
-    build: ./crdt-relay
+    build:
+      context: ./crdt-relay
+      dockerfile: Dockerfile
+    container_name: gfr-crdt-relay
+    environment:
+      # crdt-relay/server.js reads process.env.PORT (defaulting to 1234 if
+      # unset), not RELAY_PORT -- set PORT here so the env var actually
+      # takes effect instead of relying on the coincidental default.
+      PORT: "1234"
+      BACKEND_URL: http://backend:8000
     ports:
       - "1234:1234"
+    depends_on:
+      - backend
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: gfr-frontend
+    environment:
+      VITE_API_URL: http://backend:8000
+      VITE_CRDT_WS_URL: ws://crdt-relay:1234
     ports:
       - "5173:5173"
+    depends_on:
+      - backend
+      - crdt-relay
+
+volumes:
+  gfr-postgres-data:
+  gfr-artifact-store:
