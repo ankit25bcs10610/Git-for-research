@@ -44,3 +44,20 @@ def test_branch_head_resolves_to_the_commit_it_was_created_from(db_session, arti
     artifact.branch("feature", commit_id)
     assert artifact.branch_head("feature") == commit_id
     assert artifact.get_content("feature") == "Paragraph one.\n\nParagraph two."
+
+
+def test_diff_of_a_changed_paragraph_includes_word_diff(db_session, artifact_id):
+    artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
+    c1 = artifact.commit("Paragraph one.\n\nParagraph two.", "user-1", "init", None)
+    c2 = artifact.commit(
+        "Paragraph one.\n\nParagraph two updated.", "user-1", "edit", c1
+    )
+    entries = artifact.diff(c1, c2)
+    # diff_tokens (app.versioning.diff_engine) tags entries with a "kind" key
+    # whose value is "changed" for a replaced token, not "type"/"change".
+    changed = [entry for entry in entries if entry["kind"] == "changed"]
+    assert len(changed) == 1
+    assert changed[0]["old_text"] == "Paragraph two."
+    assert changed[0]["text"] == "Paragraph two updated."
+    assert "word_diff" in changed[0]
+    assert changed[0]["word_diff"]

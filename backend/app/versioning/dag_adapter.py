@@ -8,6 +8,7 @@ from app.versioning.dag_store import (
     get_branch_head,
     get_commit,
 )
+from app.versioning.diff_engine import diff_tokens, diff_words
 from app.versioning.interface import VersionedArtifact
 
 
@@ -33,6 +34,19 @@ class DagVersionedArtifact(VersionedArtifact):
             self.session, self.artifact_id, blob_hash, parent_ids, author, message
         )
         return commit_id
+
+    def diff(self, ref_a: str, ref_b: str) -> List[Dict]:
+        content_a = self.get_content(ref_a)
+        content_b = self.get_content(ref_b)
+        tokens_a = self.tokenizer(content_a)
+        tokens_b = self.tokenizer(content_b)
+        entries = diff_tokens(tokens_a, tokens_b)
+        for entry in entries:
+            # diff_tokens tags a replaced token's entry with kind="changed"
+            # (not "type"/"change"); nest a word_diff on those entries only.
+            if entry.get("kind") == "changed":
+                entry["word_diff"] = diff_words(entry["old_text"], entry["text"])
+        return entries
 
     def branch(self, name: str, from_ref: str) -> None:
         commit_id = self._resolve_commit_id(from_ref)
