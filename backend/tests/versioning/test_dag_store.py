@@ -10,6 +10,7 @@ from app.versioning.dag_store import (
     get_blob_content,
     create_commit,
     get_commit,
+    list_commits,
     create_branch,
     get_branch_head,
     update_branch_head,
@@ -288,3 +289,40 @@ def test_branch_unique_constraint_rejects_duplicate_row_at_db_level(db_session):
 
     # Leave the session in a usable state for the fixture's own teardown.
     db_session.rollback()
+
+
+def test_list_commits_returns_all_commits_for_artifact_in_creation_order():
+    artifact_id = str(uuid.uuid4())
+    other_artifact_id = str(uuid.uuid4())
+
+    with get_session() as session:
+        blob_hash = create_blob(session, f"root content {uuid.uuid4()}")
+        root_id = create_commit(
+            session,
+            artifact_id=artifact_id,
+            blob_hash=blob_hash,
+            parent_ids=[],
+            author="user-1",
+            message="root",
+        )
+        child_id = create_commit(
+            session,
+            artifact_id=artifact_id,
+            blob_hash=blob_hash,
+            parent_ids=[root_id],
+            author="user-1",
+            message="child",
+        )
+        create_commit(
+            session,
+            artifact_id=other_artifact_id,
+            blob_hash=blob_hash,
+            parent_ids=[],
+            author="user-1",
+            message="unrelated artifact's commit",
+        )
+
+        commits = list_commits(session, artifact_id)
+
+        assert [c.id for c in commits] == [root_id, child_id]
+        assert commits[1].parent_ids == [root_id]

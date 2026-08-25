@@ -4,10 +4,12 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, tokenizer_for_type
 from app.artifacts import get_artifact, list_artifacts
+from app.crdt.last_seen import get_changes_since, mark_seen
+from app.db.models import Branch, MergeRequest
 from app.retrieval.chunker import chunk_messages, chunk_prose
 from app.retrieval.query import index_chunks
 from app.versioning.dag_adapter import DagVersionedArtifact
-from app.versioning.dag_store import update_branch_head
+from app.versioning.dag_store import list_commits, update_branch_head
 
 router = APIRouter()
 
@@ -22,6 +24,11 @@ class CommitRequest(BaseModel):
     content: str
     message: str
     author: str = "user-1"
+
+
+class SeenRequest(BaseModel):
+    user_id: str
+    commit_ref: str
 
 
 def _artifact_or_404(db: Session, artifact_id: str):
@@ -43,6 +50,43 @@ def get_workspace_artifacts(workspace_id: str, db: Session = Depends(get_db)):
 def get_artifact_detail(artifact_id: str, db: Session = Depends(get_db)):
     a = _artifact_or_404(db, artifact_id)
     return {"id": a.id, "workspaceId": a.workspace_id, "type": a.type, "name": a.name}
+
+
+@router.get("/artifacts/{artifact_id}/graph")
+def get_artifact_graph_route(artifact_id: str, db: Session = Depends(get_db)):
+    _artifact_or_404(db, artifact_id)
+    commits = list_commits(db, artifact_id)
+    branches = db.query(Branch).filter_by(artifact_id=artifact_id).all()
+    merge_requests = db.query(MergeRequest).filter_by(artifact_id=artifact_id).all()
+    return {
+        "commits": [
+            {
+                "id": c.id,
+                "parent_ids": c.parent_ids,
+                "author": c.author,
+                "message": c.message,
+                "created_at": c.created_at.isoformat(),
+            }
+            for c in commits
+        ],
+        "branches": [{"name": b.name, "head_commit_id": b.head_commit_id} for b in branches],
+        "merge_requests": [
+            {
+                "id": mr.id,
+                "source_branch": mr.source_branch,
+                "target_branch": mr.target_branch,
+                "status": mr.status,
+            }
+            for mr in merge_requests
+        ],
+    }
+
+
+@router.get("/artifacts/{artifact_id}/branches")
+def list_branches_route(artifact_id: str, db: Session = Depends(get_db)):
+    _artifact_or_404(db, artifact_id)
+    rows = db.query(Branch).filter_by(artifact_id=artifact_id).all()
+    return [{"name": b.name, "head_commit_id": b.head_commit_id} for b in rows]
 
 
 @router.post("/artifacts/{artifact_id}/branches")
@@ -85,3 +129,27 @@ def get_content_route(artifact_id: str, ref: str, db: Session = Depends(get_db))
     a = _artifact_or_404(db, artifact_id)
     artifact = DagVersionedArtifact(db, artifact_id, tokenizer_for_type(a.type))
     return {"content": artifact.get_content(ref)}
+
+
+@router.get("/artifacts/{artifact_id}/changes")
+def get_changes_route(
+    artifact_id: str, user_id: str, branch_name: str = "main", db: Session = Depends(get_db)
+):
+    _artifact_or_404(db, artifact_id)
+    commits = get_changes_since(db, user_id, artifact_id, branch_name)
+    return [
+        {
+            "id": c.id,
+            "message": c.message,
+            "author": c.author,
+            "created_at": c.created_at.isoformat(),
+        }
+        for c in commits
+    ]
+
+
+@router.post("/artifacts/{artifact_id}/seen")
+def mark_seen_route(artifact_id: str, body: SeenRequest, db: Session = Depends(get_db)):
+    _artifact_or_404(db, artifact_id)
+    mark_seen(db, body.user_id, artifact_id, body.commit_ref)
+    return {"status": "ok"}

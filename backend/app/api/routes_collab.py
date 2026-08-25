@@ -10,6 +10,7 @@ from app.collab.merge_requests import (
     merge_merge_request,
     reject_merge_request,
 )
+from app.db.models import MergeRequest
 
 router = APIRouter()
 
@@ -27,6 +28,20 @@ class AgentEditRequest(BaseModel):
     base_branch: str
     instruction: str
     proposed_content: str
+
+
+@router.get("/artifacts/{artifact_id}/merge-requests")
+def list_merge_requests_route(artifact_id: str, db: Session = Depends(get_db)):
+    rows = db.query(MergeRequest).filter_by(artifact_id=artifact_id).all()
+    return [
+        {
+            "id": mr.id,
+            "source_branch": mr.source_branch,
+            "target_branch": mr.target_branch,
+            "status": mr.status,
+        }
+        for mr in rows
+    ]
 
 
 @router.post("/artifacts/{artifact_id}/merge-requests")

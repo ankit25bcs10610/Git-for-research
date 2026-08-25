@@ -52,6 +52,15 @@ def get_commit(session, commit_id: str) -> Commit:
     return commit
 
 
+def list_commits(session, artifact_id: str) -> list:
+    return (
+        session.query(Commit)
+        .filter_by(artifact_id=artifact_id)
+        .order_by(Commit.created_at)
+        .all()
+    )
+
+
 def create_branch(session, artifact_id: str, name: str, head_commit_id: str) -> None:
     # Guard against an ordinary sequential double-submit (e.g. a double
     # click) creating a second Branch row for the same (artifact_id, name):
