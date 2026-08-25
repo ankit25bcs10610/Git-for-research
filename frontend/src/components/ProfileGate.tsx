@@ -6,17 +6,20 @@ const INPUT =
   'flex-1 rounded-md border border-stone-300 bg-white px-2 py-1 text-sm text-stone-900 focus:border-cyan-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
 
 export default function ProfileGate({ children }: { children: ReactNode }) {
-  const { profile, setProfile } = useProfile()
+  const { profile, setProfile, clearProfile } = useProfile()
   const [users, setUsers] = useState<UserProfile[]>([])
   const [newUsername, setNewUsername] = useState('')
   const [status, setStatus] = useState('')
 
   useEffect(() => {
-    if (!profile) {
-      listUsers()
-        .then(setUsers)
-        .catch((err) => setStatus((err as Error).message))
-    }
+    listUsers()
+      .then((fetched) => {
+        setUsers(fetched)
+        if (profile && !fetched.some((u) => u.username === profile.username)) {
+          clearProfile()
+        }
+      })
+      .catch((err) => setStatus((err as Error).message))
   }, [profile])
 
   if (profile) return <>{children}</>

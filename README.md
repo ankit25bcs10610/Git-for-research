@@ -74,6 +74,11 @@ For example: expand `POST /api/workspaces/{workspace_id}/artifacts/ingest/markdo
 type any string as `workspace_id`, upload a `.md` file, and Execute — you
 get back a real `artifact_id` you can then paste into
 `GET /api/artifacts/{artifact_id}` to see it looked up from the database.
+Before trying this (or any other ingestion or commit route), first call
+`POST /api/users` with a `username` (and optional `display_name`) to create
+a user profile, then use that exact username as the `author` value on the
+ingestion/commit route you're trying — these routes now require an
+`author` that resolves to a real user profile and return 404 otherwise.
 
 **Important caveat, read before trying `docker compose up --build`**: it
 was **not** run in the sandbox this project was built in (no Docker was
@@ -172,7 +177,13 @@ assumed from the plan:
    touches the database would work. (The locally-run backend this was
    verified against had its tables created once, by hand, via the same
    `Base.metadata.create_all(engine)` call the test suite uses — not
-   through any route or startup hook.)
+   through any route or startup hook.) Note that `Base.metadata.create_all(engine)`
+   on its own, without a preceding `drop_all`, is additive and safe to run
+   against a database that already has data (it only creates tables that
+   don't yet exist) — but `backend/tests/test_db_models.py`'s own test
+   deliberately calls `drop_all` first and will wipe all existing data, so
+   that specific test should not be treated as the setup mechanism for a
+   real database.
 2. **The FastAPI route layer (`backend/app/api/`) has no automated test
    coverage.** It exists now and every endpoint has been verified by hand
    against a live server — `scripts/e2e_smoke.py` runs end to end

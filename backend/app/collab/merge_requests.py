@@ -132,7 +132,7 @@ def merge_merge_request(session, mr_id: str, resolutions=None) -> bool:
             mr.artifact_id,
             blob_hash,
             [target_head, source_head],
-            "user-1",
+            "merge-bot",
             "resolve merge conflicts",
         )
 
