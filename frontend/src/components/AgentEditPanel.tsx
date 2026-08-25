@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { agentEdit } from '../api'
+import { useProfile } from '../profile/ProfileContext'
 import Card from './ui/Card'
 
 interface Props {
@@ -11,6 +12,7 @@ const INPUT =
   'rounded-md border border-stone-300 bg-white px-2 py-1 text-sm text-stone-900 focus:border-cyan-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
 
 export default function AgentEditPanel({ artifactId, onChanged }: Props) {
+  const { profile } = useProfile()
   const [baseBranch, setBaseBranch] = useState('main')
   const [instruction, setInstruction] = useState('')
   const [proposedContent, setProposedContent] = useState('')
@@ -19,7 +21,13 @@ export default function AgentEditPanel({ artifactId, onChanged }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     try {
-      const { merge_request_id } = await agentEdit(artifactId, baseBranch, instruction, proposedContent)
+      const { merge_request_id } = await agentEdit(
+        artifactId,
+        baseBranch,
+        instruction,
+        proposedContent,
+        profile?.username ?? '',
+      )
       setStatus(
         `Agent opened merge request ${merge_request_id} — review and merge it in the "Merge requests" panel above.`,
       )

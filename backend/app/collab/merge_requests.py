@@ -33,7 +33,9 @@ def _find_common_ancestor(session, ref_a: str, ref_b: str) -> str:
     return None
 
 
-def create_merge_request(session, artifact_id: str, source_branch: str, target_branch: str) -> str:
+def create_merge_request(
+    session, artifact_id: str, source_branch: str, target_branch: str, opened_by: str
+) -> str:
     target_head = get_branch_head(session, artifact_id, target_branch)
     source_head = get_branch_head(session, artifact_id, source_branch)
     base_commit_ref = _find_common_ancestor(session, target_head, source_head)
@@ -45,6 +47,7 @@ def create_merge_request(session, artifact_id: str, source_branch: str, target_b
         target_branch=target_branch,
         status="open",
         base_commit_ref=base_commit_ref,
+        opened_by=opened_by,
     )
     session.add(mr)
     session.commit()
@@ -70,7 +73,7 @@ def get_merge_request_diff(session, mr_id: str) -> dict:
     return diff3_merge(base_tokens, ours_tokens, theirs_tokens)
 
 
-def merge_merge_request(session, mr_id: str, resolutions=None) -> bool:
+def merge_merge_request(session, mr_id: str, resolutions, merged_by: str) -> bool:
     mr = session.get(MergeRequest, mr_id)
     if mr.status != "open":
         return False
@@ -152,13 +155,15 @@ def merge_merge_request(session, mr_id: str, resolutions=None) -> bool:
     ):
         return False
     mr.status = "merged"
+    mr.merged_by = merged_by
     session.commit()
     return True
 
 
-def reject_merge_request(session, mr_id: str) -> None:
+def reject_merge_request(session, mr_id: str, rejected_by: str) -> None:
     mr = session.get(MergeRequest, mr_id)
     if mr.status != "open":
         return
     mr.status = "rejected"
+    mr.rejected_by = rejected_by
     session.commit()

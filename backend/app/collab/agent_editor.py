@@ -14,7 +14,9 @@ from app.versioning.diff_engine import tokenize_paragraphs
 _paragraph_tokenizer = tokenize_paragraphs
 
 
-def agent_edit(session, artifact_id: str, base_branch: str, instruction: str, llm_call) -> str:
+def agent_edit(
+    session, artifact_id: str, base_branch: str, instruction: str, llm_call, triggered_by: str
+) -> str:
     artifact = DagVersionedArtifact(session, artifact_id, _paragraph_tokenizer)
 
     base_head = artifact.branch_head(base_branch)
@@ -29,5 +31,5 @@ def agent_edit(session, artifact_id: str, base_branch: str, instruction: str, ll
     new_commit_id = artifact.commit(proposed_content, "agent", instruction, base_head)
     update_branch_head(session, artifact_id, new_branch_name, new_commit_id)
 
-    mr_id = create_merge_request(session, artifact_id, new_branch_name, base_branch)
+    mr_id = create_merge_request(session, artifact_id, new_branch_name, base_branch, triggered_by)
     return mr_id

@@ -15,7 +15,7 @@ def test_agent_edit_creates_branch_commit_and_open_merge_request(db_session):
     artifact.branch("main", root)
 
     mr_id = agent_edit(
-        db_session, artifact_id, "main", "Append a closing remark.", _fake_llm_call
+        db_session, artifact_id, "main", "Append a closing remark.", _fake_llm_call, "user-1"
     )
 
     mr = db_session.get(MergeRequest, mr_id)
@@ -36,10 +36,10 @@ def test_agent_edit_produces_distinct_branches_on_repeated_calls(db_session):
     artifact.branch("main", root)
 
     mr_id_one = agent_edit(
-        db_session, artifact_id, "main", "First instruction.", _fake_llm_call
+        db_session, artifact_id, "main", "First instruction.", _fake_llm_call, "user-1"
     )
     mr_id_two = agent_edit(
-        db_session, artifact_id, "main", "Second instruction.", _fake_llm_call
+        db_session, artifact_id, "main", "Second instruction.", _fake_llm_call, "user-1"
     )
 
     mr_one = db_session.get(MergeRequest, mr_id_one)

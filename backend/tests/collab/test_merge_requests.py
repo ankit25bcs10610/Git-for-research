@@ -24,7 +24,7 @@ def test_create_merge_request_records_base_commit_ref(db_session):
         "Intro paragraph.\n\nEdited body paragraph.", "user-1", "edit body", root
     )
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-a", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-a", "main", "user-1")
 
     mr = db_session.get(MergeRequest, mr_id)
     assert mr is not None
@@ -33,6 +33,7 @@ def test_create_merge_request_records_base_commit_ref(db_session):
     assert mr.target_branch == "main"
     assert mr.status == "open"
     assert mr.base_commit_ref == get_branch_head(db_session, artifact_id, "main")
+    assert mr.opened_by == "user-1"
 
 
 def test_get_merge_request_diff_reports_no_conflicts_for_disjoint_edits(db_session):
@@ -54,7 +55,7 @@ def test_get_merge_request_diff_reports_no_conflicts_for_disjoint_edits(db_sessi
     )
     update_branch_head(db_session, artifact_id, "feature-b", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-b", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-b", "main", "user-1")
     result = get_merge_request_diff(db_session, mr_id)
 
     assert result["conflicts"] == []
@@ -76,10 +77,10 @@ def test_merge_merge_request_advances_target_head_when_no_conflicts(db_session):
     )
     update_branch_head(db_session, artifact_id, "feature-c", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-c", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-c", "main", "user-1")
     old_head = get_branch_head(db_session, artifact_id, "main")
 
-    result = merge_merge_request(db_session, mr_id, None)
+    result = merge_merge_request(db_session, mr_id, None, "user-1")
 
     new_head = get_branch_head(db_session, artifact_id, "main")
     mr = db_session.get(MergeRequest, mr_id)
@@ -115,20 +116,18 @@ def test_merge_merge_request_blocks_on_conflict_until_resolved(db_session):
     )
     update_branch_head(db_session, artifact_id, "feature-d", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-d", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-d", "main", "user-1")
 
     diff_result = get_merge_request_diff(db_session, mr_id)
     assert len(diff_result["conflicts"]) == 1
 
-    blocked = merge_merge_request(db_session, mr_id, None)
+    blocked = merge_merge_request(db_session, mr_id, None, "user-1")
     mr = db_session.get(MergeRequest, mr_id)
     assert blocked is False
     assert mr.status == "open"
 
     conflict_position = diff_result["conflicts"][0]["position"]
-    resolved = merge_merge_request(
-        db_session, mr_id, {conflict_position: "Resolved merged body."}
-    )
+    resolved = merge_merge_request(db_session, mr_id, {conflict_position: "Resolved merged body."}, "user-1")
     mr = db_session.get(MergeRequest, mr_id)
     assert resolved is True
     assert mr.status == "merged"
@@ -153,9 +152,9 @@ def test_merge_merge_request_on_already_merged_mr_returns_false_and_does_not_mov
     )
     update_branch_head(db_session, artifact_id, "feature-e", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-e", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-e", "main", "user-1")
 
-    first_result = merge_merge_request(db_session, mr_id, None)
+    first_result = merge_merge_request(db_session, mr_id, None, "user-1")
     assert first_result is True
     mr = db_session.get(MergeRequest, mr_id)
     assert mr.status == "merged"
@@ -163,7 +162,7 @@ def test_merge_merge_request_on_already_merged_mr_returns_false_and_does_not_mov
 
     # Replaying the merge on an already-"merged" MR must not re-run the merge
     # logic or advance the branch head a second time.
-    second_result = merge_merge_request(db_session, mr_id, None)
+    second_result = merge_merge_request(db_session, mr_id, None, "user-1")
 
     mr = db_session.get(MergeRequest, mr_id)
     head_after_second_call = get_branch_head(db_session, artifact_id, "main")
@@ -193,15 +192,15 @@ def test_merge_merge_request_on_rejected_mr_returns_false_and_does_not_flip_to_m
     )
     update_branch_head(db_session, artifact_id, "feature-f", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-f", "main")
-    reject_merge_request(db_session, mr_id)
+    mr_id = create_merge_request(db_session, artifact_id, "feature-f", "main", "user-1")
+    reject_merge_request(db_session, mr_id, "user-1")
 
     mr = db_session.get(MergeRequest, mr_id)
     assert mr.status == "rejected"
     head_before = get_branch_head(db_session, artifact_id, "main")
 
     # A rejected MR must not be silently mergeable afterwards.
-    result = merge_merge_request(db_session, mr_id, None)
+    result = merge_merge_request(db_session, mr_id, None, "user-1")
 
     mr = db_session.get(MergeRequest, mr_id)
     head_after = get_branch_head(db_session, artifact_id, "main")
@@ -236,7 +235,7 @@ def test_merge_merge_request_rejects_resolution_at_wrong_in_range_position(db_se
     )
     update_branch_head(db_session, artifact_id, "feature-g", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-g", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-g", "main", "user-1")
     diff_result = get_merge_request_diff(db_session, mr_id)
     conflict_position = diff_result["conflicts"][0]["position"]
     # position 0 is "Intro paragraph." — a real, non-conflicting list index —
@@ -244,7 +243,7 @@ def test_merge_merge_request_rejects_resolution_at_wrong_in_range_position(db_se
     wrong_position = 0
     assert wrong_position != conflict_position
 
-    result = merge_merge_request(db_session, mr_id, {wrong_position: "corrupted text"})
+    result = merge_merge_request(db_session, mr_id, {wrong_position: "corrupted text"}, "user-1")
 
     mr = db_session.get(MergeRequest, mr_id)
     head_after = get_branch_head(db_session, artifact_id, "main")
@@ -280,10 +279,10 @@ def test_merge_merge_request_rejects_resolution_at_out_of_range_position(db_sess
     )
     update_branch_head(db_session, artifact_id, "feature-h", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-h", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-h", "main", "user-1")
 
     # Must not raise IndexError, and must not merge.
-    result = merge_merge_request(db_session, mr_id, {9999: "corrupted text"})
+    result = merge_merge_request(db_session, mr_id, {9999: "corrupted text"}, "user-1")
 
     mr = db_session.get(MergeRequest, mr_id)
     head_after = get_branch_head(db_session, artifact_id, "main")
@@ -314,13 +313,13 @@ def test_merge_merge_request_rejects_resolutions_missing_a_conflict_position(db_
     feature_commit = artifact.commit("Feature A.\n\nFeature B.", "user-1", "feature edit", root)
     update_branch_head(db_session, artifact_id, "feature-i", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-i", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-i", "main", "user-1")
     diff_result = get_merge_request_diff(db_session, mr_id)
     assert len(diff_result["conflicts"]) == 2
 
     first_position = diff_result["conflicts"][0]["position"]
     # Only resolving one of the two required conflict positions.
-    result = merge_merge_request(db_session, mr_id, {first_position: "Resolved A."})
+    result = merge_merge_request(db_session, mr_id, {first_position: "Resolved A."}, "user-1")
 
     mr = db_session.get(MergeRequest, mr_id)
     head_after = get_branch_head(db_session, artifact_id, "main")
@@ -346,7 +345,7 @@ def test_merge_merge_request_returns_false_and_does_not_clobber_concurrent_head_
     )
     update_branch_head(db_session, artifact_id, "feature-j", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-j", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-j", "main", "user-1")
 
     # A concurrent writer's commit that lands on "main" after this
     # finalizer has already read the target branch head (inside
@@ -365,7 +364,7 @@ def test_merge_merge_request_returns_false_and_does_not_clobber_concurrent_head_
 
     monkeypatch.setattr(DagVersionedArtifact, "merge", merge_with_interleaved_concurrent_write)
 
-    result = merge_merge_request(db_session, mr_id, None)
+    result = merge_merge_request(db_session, mr_id, None, "user-1")
 
     mr = db_session.get(MergeRequest, mr_id)
     final_head = get_branch_head(db_session, artifact_id, "main")
@@ -412,13 +411,11 @@ def test_merge_merge_request_resolved_conflict_commit_has_both_parents(db_sessio
     )
     update_branch_head(db_session, artifact_id, "feature-k", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-k", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-k", "main", "user-1")
     diff_result = get_merge_request_diff(db_session, mr_id)
     conflict_position = diff_result["conflicts"][0]["position"]
 
-    resolved = merge_merge_request(
-        db_session, mr_id, {conflict_position: "Resolved merged body."}
-    )
+    resolved = merge_merge_request(db_session, mr_id, {conflict_position: "Resolved merged body."}, "user-1")
     assert resolved is True
 
     merge_commit_id = get_branch_head(db_session, artifact_id, "main")
@@ -464,13 +461,11 @@ def test_merge_merge_request_resolved_conflict_source_reachable_via_all_parents(
     )
     update_branch_head(db_session, artifact_id, "feature-l", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-l", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-l", "main", "user-1")
     diff_result = get_merge_request_diff(db_session, mr_id)
     conflict_position = diff_result["conflicts"][0]["position"]
 
-    resolved = merge_merge_request(
-        db_session, mr_id, {conflict_position: "Resolved merged body."}
-    )
+    resolved = merge_merge_request(db_session, mr_id, {conflict_position: "Resolved merged body."}, "user-1")
     assert resolved is True
 
     merge_commit_id = get_branch_head(db_session, artifact_id, "main")
@@ -526,14 +521,14 @@ def test_merge_merge_request_accepts_string_keyed_resolutions(db_session):
     )
     update_branch_head(db_session, artifact_id, "feature-m", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-m", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-m", "main", "user-1")
     diff_result = get_merge_request_diff(db_session, mr_id)
     conflict_position = diff_result["conflicts"][0]["position"]
 
     # String key, exactly as it would arrive after a JSON round-trip.
     string_keyed_resolutions = {str(conflict_position): "Resolved merged body."}
 
-    result = merge_merge_request(db_session, mr_id, string_keyed_resolutions)
+    result = merge_merge_request(db_session, mr_id, string_keyed_resolutions, "user-1")
 
     mr = db_session.get(MergeRequest, mr_id)
     new_head = get_branch_head(db_session, artifact_id, "main")
@@ -569,9 +564,9 @@ def test_merge_merge_request_rejects_non_numeric_string_keyed_resolutions(db_ses
     )
     update_branch_head(db_session, artifact_id, "feature-n", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-n", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-n", "main", "user-1")
 
-    result = merge_merge_request(db_session, mr_id, {"abc": "text"})
+    result = merge_merge_request(db_session, mr_id, {"abc": "text"}, "user-1")
 
     mr = db_session.get(MergeRequest, mr_id)
     head_after = get_branch_head(db_session, artifact_id, "main")
@@ -620,7 +615,7 @@ def test_get_merge_request_diff_uses_message_tokenizer_for_chat_artifacts(db_ses
     feature_commit = artifact.commit(feature_json, "user-1", "feature edit", root)
     update_branch_head(db_session, artifact_id, "feature-chat", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-chat", "main")
+    mr_id = create_merge_request(db_session, artifact_id, "feature-chat", "main", "user-1")
     result = get_merge_request_diff(db_session, mr_id)
 
     assert result["conflicts"] == []
@@ -659,8 +654,8 @@ def test_merge_merge_request_chat_clean_merge_produces_valid_message_json(db_ses
     feature_commit = artifact.commit(feature_json, "user-1", "feature edit", root)
     update_branch_head(db_session, artifact_id, "feature-chat-2", feature_commit)
 
-    mr_id = create_merge_request(db_session, artifact_id, "feature-chat-2", "main")
-    result = merge_merge_request(db_session, mr_id, None)
+    mr_id = create_merge_request(db_session, artifact_id, "feature-chat-2", "main", "user-1")
+    result = merge_merge_request(db_session, mr_id, None, "user-1")
     assert result is True
 
     new_head = get_branch_head(db_session, artifact_id, "main")
@@ -674,3 +669,85 @@ def test_merge_merge_request_chat_clean_merge_produces_valid_message_json(db_ses
 
     merge_commit = get_commit(db_session, new_head)
     assert set(merge_commit.parent_ids) == {main_commit, feature_commit}
+
+
+def test_merge_merge_request_records_merged_by_on_success(db_session):
+    """Regression test for the missing-identity-tracking finding.
+
+    routes_collab.py recorded no author at all for opening/merging/rejecting a
+    merge request. merge_merge_request must record who actually performed the
+    merge once it succeeds.
+    """
+    from app.collab.merge_requests import merge_merge_request
+    from app.versioning.dag_store import update_branch_head
+
+    artifact_id = "artifact-mr-15"
+    _insert_artifact(db_session, artifact_id)
+    artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
+    root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
+    artifact.branch("main", root)
+    artifact.branch("feature-o", root)
+
+    feature_commit = artifact.commit(
+        "Intro paragraph.\n\nEdited body paragraph.", "user-1", "edit body", root
+    )
+    update_branch_head(db_session, artifact_id, "feature-o", feature_commit)
+
+    mr_id = create_merge_request(db_session, artifact_id, "feature-o", "main", "alice")
+    result = merge_merge_request(db_session, mr_id, None, "bob")
+
+    mr = db_session.get(MergeRequest, mr_id)
+    assert result is True
+    assert mr.opened_by == "alice"
+    assert mr.merged_by == "bob"
+
+
+def test_merge_merge_request_does_not_record_merged_by_when_blocked(db_session):
+    """A merge that's blocked (unresolved conflict) never actually merged --
+    merged_by must stay unset, not attribute a merge that didn't happen.
+    """
+    from app.collab.merge_requests import merge_merge_request
+    from app.versioning.dag_store import update_branch_head
+
+    artifact_id = "artifact-mr-16"
+    _insert_artifact(db_session, artifact_id)
+    artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
+    root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
+    artifact.branch("main", root)
+    artifact.branch("feature-p", root)
+
+    main_commit = artifact.commit(
+        "Intro paragraph.\n\nMain-edited body.", "user-1", "main edit", root
+    )
+    update_branch_head(db_session, artifact_id, "main", main_commit)
+
+    feature_commit = artifact.commit(
+        "Intro paragraph.\n\nFeature-edited body.", "user-1", "feature edit", root
+    )
+    update_branch_head(db_session, artifact_id, "feature-p", feature_commit)
+
+    mr_id = create_merge_request(db_session, artifact_id, "feature-p", "main", "alice")
+    result = merge_merge_request(db_session, mr_id, None, "bob")
+
+    mr = db_session.get(MergeRequest, mr_id)
+    assert result is False
+    assert mr.merged_by is None
+
+
+def test_reject_merge_request_records_rejected_by(db_session):
+    from app.collab.merge_requests import reject_merge_request
+
+    artifact_id = "artifact-mr-17"
+    _insert_artifact(db_session, artifact_id)
+    artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
+    root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
+    artifact.branch("main", root)
+    artifact.branch("feature-q", root)
+
+    mr_id = create_merge_request(db_session, artifact_id, "feature-q", "main", "alice")
+    reject_merge_request(db_session, mr_id, "carol")
+
+    mr = db_session.get(MergeRequest, mr_id)
+    assert mr.status == "rejected"
+    assert mr.opened_by == "alice"
+    assert mr.rejected_by == "carol"

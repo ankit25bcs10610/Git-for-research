@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { layoutMergeRequestEdges } from './CommitGraph3D'
-import type { ArtifactGraph } from '../api'
+import type { ArtifactGraph, MergeRequestSummary } from '../api'
+
+function mr(overrides: Partial<MergeRequestSummary> & Pick<MergeRequestSummary, 'id' | 'source_branch' | 'target_branch' | 'status'>): MergeRequestSummary {
+  return { opened_by: 'user-1', merged_by: null, rejected_by: null, ...overrides }
+}
 
 function graph(overrides: Partial<ArtifactGraph> = {}): ArtifactGraph {
   return {
@@ -27,7 +31,7 @@ const positionById = new Map<string, [number, number, number]>([
 describe('layoutMergeRequestEdges', () => {
   it('produces an edge between the source and target branch heads for an open merge request', () => {
     const g = graph({
-      merge_requests: [{ id: 'mr-1', source_branch: 'feature-a', target_branch: 'main', status: 'open' }],
+      merge_requests: [mr({ id: 'mr-1', source_branch: 'feature-a', target_branch: 'main', status: 'open' })],
     })
 
     const edges = layoutMergeRequestEdges(g, positionById)
@@ -47,7 +51,7 @@ describe('layoutMergeRequestEdges', () => {
   it('skips a merge request whose branch no longer exists in the graph', () => {
     const g = graph({
       merge_requests: [
-        { id: 'mr-2', source_branch: 'deleted-branch', target_branch: 'main', status: 'open' },
+        mr({ id: 'mr-2', source_branch: 'deleted-branch', target_branch: 'main', status: 'open' }),
       ],
     })
 
@@ -57,8 +61,8 @@ describe('layoutMergeRequestEdges', () => {
   it('returns one edge per merge request, including merged and rejected ones', () => {
     const g = graph({
       merge_requests: [
-        { id: 'mr-1', source_branch: 'feature-a', target_branch: 'main', status: 'merged' },
-        { id: 'mr-2', source_branch: 'feature-a', target_branch: 'main', status: 'rejected' },
+        mr({ id: 'mr-1', source_branch: 'feature-a', target_branch: 'main', status: 'merged' }),
+        mr({ id: 'mr-2', source_branch: 'feature-a', target_branch: 'main', status: 'rejected' }),
       ],
     })
 

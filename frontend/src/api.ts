@@ -50,6 +50,9 @@ export interface MergeRequestSummary {
   source_branch: string
   target_branch: string
   status: 'open' | 'merged' | 'rejected'
+  opened_by: string
+  merged_by: string | null
+  rejected_by: string | null
 }
 
 export interface MergeRequestDiff {
@@ -176,10 +179,12 @@ export function createMergeRequest(
   artifactId: string,
   sourceBranch: string,
   targetBranch: string,
+  author: string,
 ): Promise<{ merge_request_id: string }> {
   return postJson(`/artifacts/${artifactId}/merge-requests`, {
     source_branch: sourceBranch,
     target_branch: targetBranch,
+    author,
   })
 }
 
@@ -190,11 +195,12 @@ export function getMergeRequestDiff(mrId: string): Promise<MergeRequestDiff> {
 export async function mergeMergeRequest(
   mrId: string,
   resolutions: Record<number, string> | null,
+  author: string,
 ): Promise<{ merged: boolean }> {
   const response = await fetch(`${BASE_URL}/merge-requests/${mrId}/merge`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ resolutions }),
+    body: JSON.stringify({ resolutions, author }),
   })
   const body = await response.json()
   if (!response.ok) {
@@ -203,8 +209,8 @@ export async function mergeMergeRequest(
   return body
 }
 
-export function rejectMergeRequest(mrId: string): Promise<{ status: string }> {
-  return postJson(`/merge-requests/${mrId}/reject`, {})
+export function rejectMergeRequest(mrId: string, author: string): Promise<{ status: string }> {
+  return postJson(`/merge-requests/${mrId}/reject`, { author })
 }
 
 export function agentEdit(
@@ -212,11 +218,13 @@ export function agentEdit(
   baseBranch: string,
   instruction: string,
   proposedContent: string,
+  author: string,
 ): Promise<{ merge_request_id: string }> {
   return postJson(`/artifacts/${artifactId}/agent-edit`, {
     base_branch: baseBranch,
     instruction,
     proposed_content: proposedContent,
+    author,
   })
 }
 

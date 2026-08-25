@@ -8,6 +8,7 @@ import {
   type MergeRequestDiff,
   type MergeRequestSummary,
 } from '../api'
+import { useProfile } from '../profile/ProfileContext'
 import Card from './ui/Card'
 
 interface Props {
@@ -20,6 +21,7 @@ const INPUT =
   'rounded-md border border-stone-300 bg-white px-2 py-1 text-sm text-stone-900 focus:border-cyan-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
 
 export default function MergeRequestsPanel({ artifactId, refreshSignal, onChanged }: Props) {
+  const { profile } = useProfile()
   const [mergeRequests, setMergeRequests] = useState<MergeRequestSummary[]>([])
   const [sourceBranch, setSourceBranch] = useState('')
   const [targetBranch, setTargetBranch] = useState('main')
@@ -44,7 +46,12 @@ export default function MergeRequestsPanel({ artifactId, refreshSignal, onChange
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
     try {
-      const { merge_request_id } = await createMergeRequest(artifactId, sourceBranch, targetBranch)
+      const { merge_request_id } = await createMergeRequest(
+        artifactId,
+        sourceBranch,
+        targetBranch,
+        profile?.username ?? '',
+      )
       setStatus(`Opened merge request ${merge_request_id}`)
       refresh()
       onChanged()
@@ -69,7 +76,7 @@ export default function MergeRequestsPanel({ artifactId, refreshSignal, onChange
   async function handleMerge() {
     if (!selectedId || !diff) return
     try {
-      await mergeMergeRequest(selectedId, diff.has_conflict ? resolutions : null)
+      await mergeMergeRequest(selectedId, diff.has_conflict ? resolutions : null, profile?.username ?? '')
       setStatus('Merged.')
       setSelectedId(null)
       setDiff(null)
@@ -82,7 +89,7 @@ export default function MergeRequestsPanel({ artifactId, refreshSignal, onChange
 
   async function handleReject() {
     if (!selectedId) return
-    await rejectMergeRequest(selectedId)
+    await rejectMergeRequest(selectedId, profile?.username ?? '')
     setStatus('Rejected.')
     setSelectedId(null)
     setDiff(null)
@@ -127,7 +134,8 @@ export default function MergeRequestsPanel({ artifactId, refreshSignal, onChange
               }`}
             >
               {mr.source_branch} → {mr.target_branch}{' '}
-              <span className="font-mono text-xs opacity-70">[{mr.status}]</span>
+              <span className="font-mono text-xs opacity-70">[{mr.status}]</span>{' '}
+              <span className="text-xs opacity-70">opened by {mr.opened_by}</span>
             </button>
           </li>
         ))}

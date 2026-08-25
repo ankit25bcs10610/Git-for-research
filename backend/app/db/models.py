@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import JSON, DateTime, Integer, String, UniqueConstraint
@@ -79,6 +79,9 @@ class MergeRequest(Base):
     target_branch: Mapped[str] = mapped_column(String)
     status: Mapped[str] = mapped_column(String)
     base_commit_ref: Mapped[str] = mapped_column(String)
+    opened_by: Mapped[str] = mapped_column(String)
+    merged_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    rejected_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 
 class LastSeen(Base):
