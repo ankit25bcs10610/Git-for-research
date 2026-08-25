@@ -1,9 +1,9 @@
 import json
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, tokenizer_for_type
+from app.api.deps import get_db, require_user, tokenizer_for_type
 from app.artifacts import create_artifact
 from app.ingestion.chatgpt_parser import parse_chatgpt_export
 from app.ingestion.claude_parser import parse_claude_export
@@ -28,19 +28,21 @@ def _commit_and_index(session: Session, artifact_id: str, artifact_type: str, co
 
 @router.post("/workspaces/{workspace_id}/artifacts/ingest/markdown")
 async def ingest_markdown(
-    workspace_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)
+    workspace_id: str, file: UploadFile = File(...), author: str = Form(...), db: Session = Depends(get_db)
 ):
+    require_user(db, author)
     raw = await file.read()
     parsed = parse_markdown(raw, file.filename or "untitled.md")
     artifact_id = create_artifact(db, workspace_id, parsed.artifact_type, parsed.name)
-    commit_ref = _commit_and_index(db, artifact_id, parsed.artifact_type, parsed.content, "user-1")
+    commit_ref = _commit_and_index(db, artifact_id, parsed.artifact_type, parsed.content, author)
     return {"artifact_id": artifact_id, "commit_ref": commit_ref}
 
 
 @router.post("/workspaces/{workspace_id}/artifacts/ingest/chatgpt")
 async def ingest_chatgpt(
-    workspace_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)
+    workspace_id: str, file: UploadFile = File(...), author: str = Form(...), db: Session = Depends(get_db)
 ):
+    require_user(db, author)
     raw = await file.read()
     try:
         parsed_list = parse_chatgpt_export(raw)
@@ -50,15 +52,16 @@ async def ingest_chatgpt(
     results = []
     for parsed in parsed_list:
         artifact_id = create_artifact(db, workspace_id, parsed.artifact_type, parsed.name)
-        commit_ref = _commit_and_index(db, artifact_id, parsed.artifact_type, parsed.content, "user-1")
+        commit_ref = _commit_and_index(db, artifact_id, parsed.artifact_type, parsed.content, author)
         results.append({"artifact_id": artifact_id, "commit_ref": commit_ref, "name": parsed.name})
     return {"artifacts": results}
 
 
 @router.post("/workspaces/{workspace_id}/artifacts/ingest/claude")
 async def ingest_claude(
-    workspace_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)
+    workspace_id: str, file: UploadFile = File(...), author: str = Form(...), db: Session = Depends(get_db)
 ):
+    require_user(db, author)
     raw = await file.read()
     try:
         parsed_list = parse_claude_export(raw)
@@ -68,15 +71,16 @@ async def ingest_claude(
     results = []
     for parsed in parsed_list:
         artifact_id = create_artifact(db, workspace_id, parsed.artifact_type, parsed.name)
-        commit_ref = _commit_and_index(db, artifact_id, parsed.artifact_type, parsed.content, "user-1")
+        commit_ref = _commit_and_index(db, artifact_id, parsed.artifact_type, parsed.content, author)
         results.append({"artifact_id": artifact_id, "commit_ref": commit_ref, "name": parsed.name})
     return {"artifacts": results}
 
 
 @router.post("/workspaces/{workspace_id}/artifacts/ingest/pdf")
 async def ingest_pdf(
-    workspace_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)
+    workspace_id: str, file: UploadFile = File(...), author: str = Form(...), db: Session = Depends(get_db)
 ):
+    require_user(db, author)
     raw = await file.read()
     parsed = parse_pdf(raw, file.filename or "untitled.pdf")
 
@@ -88,5 +92,5 @@ async def ingest_pdf(
     joined_content = "\n\n".join(page["text"] for page in pages if page.get("text"))
 
     artifact_id = create_artifact(db, workspace_id, parsed.artifact_type, parsed.name)
-    commit_ref = _commit_and_index(db, artifact_id, parsed.artifact_type, joined_content, "user-1")
+    commit_ref = _commit_and_index(db, artifact_id, parsed.artifact_type, joined_content, author)
     return {"artifact_id": artifact_id, "commit_ref": commit_ref}

@@ -77,3 +77,27 @@ def test_changes_route_rejects_unknown_user():
     )
 
     assert response.status_code == 404
+
+
+def test_ingest_markdown_route_rejects_unknown_author():
+    response = client.post(
+        "/api/workspaces/demo-workspace/artifacts/ingest/markdown",
+        files={"file": ("note.md", b"# Hello\n\nWorld", "text/markdown")},
+        data={"author": f"nobody-{uuid.uuid4()}"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_ingest_markdown_route_accepts_known_author():
+    username = f"researcher-{uuid.uuid4()}"
+    with get_session() as session:
+        create_user(session, username)
+
+    response = client.post(
+        "/api/workspaces/demo-workspace/artifacts/ingest/markdown",
+        files={"file": ("note.md", b"# Hello\n\nWorld", "text/markdown")},
+        data={"author": username},
+    )
+
+    assert response.status_code == 200
