@@ -6,7 +6,12 @@ interface Props {
   onStart: () => void
 }
 
-const TRUST_BADGES = ['100% local', 'No external LLM calls', 'pgvector semantic search', 'Real two-parent merges']
+const TRUST_BADGES = [
+  'Local semantic search',
+  'External LLM calls are opt-in',
+  'pgvector semantic search',
+  'Real two-parent merges',
+]
 
 function StartButton({ onStart, className = '' }: { onStart: () => void; className?: string }) {
   return (

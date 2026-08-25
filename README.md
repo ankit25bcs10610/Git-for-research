@@ -54,6 +54,18 @@ python scripts/e2e_smoke.py
 backend/.venv/bin/python scripts/e2e_smoke.py
 ```
 
+**Optional: AI-synthesized search answers.** Everything above (including
+plain semantic search) runs fully local with no external calls. There is
+one additional, opt-in feature — a "Ask AI" button in the search panel
+(`GET /api/search/answer`) — that sends the locally-retrieved excerpts to
+Groq to synthesize a cited natural-language answer. It is disabled
+automatically (returns a clean 501) unless you set `GROQ_API_KEY` yourself
+as an environment variable before starting the backend — **never write
+the key into `docker-compose.yml`, any config file, or a commit.** For
+example: `GROQ_API_KEY=your-key-here backend/.venv/bin/uvicorn app.main:app`.
+`GROQ_MODEL` (default `llama-3.3-70b-versatile`) and `GROQ_API_URL` are
+also overridable, mainly for testing against a local fake server.
+
 The frontend is served at http://localhost:5173, the backend API at
 http://localhost:8000, and the CRDT relay at ws://localhost:1234.
 

@@ -33,21 +33,27 @@ const STEPS: Step[] = [
   },
   {
     step: 5,
+    title: 'Co-edit live, then commit the snapshot',
+    description:
+      'Open the same artifact in two browser tabs and type in the "Live co-editing" panel — changes sync instantly via a shared CRDT document. Click "Commit this as a snapshot" to turn whatever the live text says right now into a real, versioned commit on that branch.',
+  },
+  {
+    step: 6,
     title: 'Diff two refs',
     description:
       'Compare any two refs and see a breakdown by paragraph (for docs) or by message (for chat) — added/removed/changed/unchanged — with word-level highlighting inside changed entries.',
   },
   {
-    step: 6,
+    step: 7,
     title: 'Open and resolve a merge request',
     description:
       'Open a merge request between two branches and review its diff. If content conflicts, the merge is blocked until you submit a resolution for every conflicting position; a clean merge produces a real two-parent commit. For chat artifacts, conflict detection currently treats the whole conversation as a single position rather than per message — a known granularity gap, not a bug in the merge logic itself.',
   },
   {
-    step: 7,
+    step: 8,
     title: 'Search across everything ingested',
     description:
-      'Type a query to run local semantic search over every indexed chunk; each result shows its score, source artifact, and the exact commit it came from.',
+      'Type a query to run local semantic search over every indexed chunk; each result shows its score, source artifact, and the exact commit it came from. Optionally click "Ask AI" to have Groq synthesize a cited answer from those same local results — the only place this app calls an external LLM, and only when you ask for it.',
   },
 ]
 

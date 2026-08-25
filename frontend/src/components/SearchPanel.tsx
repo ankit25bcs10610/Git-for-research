@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { search, type SearchResult } from '../api'
+import { getAnswer, search, type SearchResult } from '../api'
 import Card from './ui/Card'
 
 const INPUT =
@@ -8,10 +8,13 @@ const INPUT =
 export default function SearchPanel() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[] | null>(null)
+  const [answer, setAnswer] = useState<string | null>(null)
   const [status, setStatus] = useState('')
+  const [asking, setAsking] = useState(false)
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault()
+    setAnswer(null)
     try {
       const r = await search(query)
       setResults(r)
@@ -22,9 +25,24 @@ export default function SearchPanel() {
     }
   }
 
+  async function handleAskAi() {
+    setAsking(true)
+    setStatus('')
+    try {
+      const r = await getAnswer(query)
+      setAnswer(r.answer)
+      setResults(r.sources)
+    } catch (err) {
+      setStatus((err as Error).message)
+      setAnswer(null)
+    } finally {
+      setAsking(false)
+    }
+  }
+
   return (
     <Card title="8. Search across everything ingested (semantic retrieval)">
-      <form onSubmit={handleSearch} className="mb-3 flex items-center gap-2">
+      <form onSubmit={handleSearch} className="mb-2 flex items-center gap-2">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -39,7 +57,27 @@ export default function SearchPanel() {
           Search
         </button>
       </form>
+      <div className="mb-3 flex items-center gap-2">
+        <button
+          onClick={handleAskAi}
+          disabled={!query || asking}
+          className="rounded-md border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 transition hover:bg-violet-100 disabled:opacity-50 dark:border-violet-800 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:bg-violet-500/20"
+        >
+          {asking ? 'Asking…' : 'Ask AI for a synthesized answer'}
+        </button>
+        <span className="text-xs text-stone-500 dark:text-slate-500">
+          uses Groq (external API) — search above stays 100% local
+        </span>
+      </div>
       {status && <p className="text-sm text-rose-600 dark:text-rose-400">{status}</p>}
+      {answer && (
+        <div className="mb-3 rounded-md border border-violet-200 bg-violet-50/60 p-3 text-sm text-stone-800 dark:border-violet-900/50 dark:bg-violet-500/10 dark:text-slate-200">
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-400">
+            AI-synthesized answer (Groq)
+          </p>
+          <p className="whitespace-pre-wrap">{answer}</p>
+        </div>
+      )}
       {results && (
         <ul className="space-y-2">
           {results.map((r) => (

@@ -26,9 +26,9 @@ const ITEMS: TechItem[] = [
     status: 'working',
   },
   {
-    title: 'Local semantic search, no external calls',
+    title: 'Local semantic search by default; an AI answer is opt-in',
     description:
-      "Artifacts are chunked (by paragraph, or by message for chat) and embedded locally with sentence-transformers' all-MiniLM-L6-v2 — no network call, no third-party API. Search embeds your query the same way and runs a pgvector cosine-distance nearest-neighbor lookup, with every result carrying its source artifact ID and commit ref for provenance.",
+      "Artifacts are chunked (by paragraph, or by message for chat) and embedded locally with sentence-transformers' all-MiniLM-L6-v2 — no network call, no third-party API, and this is what plain Search always uses. A separate \"Ask AI\" button additionally sends the retrieved excerpts to Groq to synthesize a cited natural-language answer — that one action is the only place this app calls an external LLM, and it's disabled entirely if no Groq API key is configured.",
     status: 'working',
   },
   {
@@ -38,10 +38,10 @@ const ITEMS: TechItem[] = [
     status: 'working',
   },
   {
-    title: 'Real-time relay, not yet connected',
+    title: 'Real-time CRDT co-editing, now wired to real commits',
     description:
-      "A y-websocket CRDT relay runs as its own service for future live co-editing, but no frontend code imports yjs or y-websocket yet, and the function that would turn a live edit session into a commit is exercised only by unit tests. There's no working path today from concurrent editing to version history.",
-    status: 'gap',
+      'A y-websocket relay syncs a shared Yjs document per artifact+branch across every open tab in real time. A "commit this as a snapshot" action turns the current live text into a real, versioned commit via the same DAG the rest of the app uses — the relay, the sync, and the commit bridge are all exercised together, not just unit-tested in isolation.',
+    status: 'working',
   },
 ]
 

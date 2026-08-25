@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends
+import requests
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, tokenizer_for_type
 from app.artifacts import get_artifact
 from app.retrieval.chunker import chunk_messages, chunk_prose
+from app.retrieval.groq_answer import synthesize_answer
 from app.retrieval.provenance import add_provenance_edge, trace_provenance
 from app.retrieval.query import index_chunks, similarity_search
 from app.versioning.dag_adapter import DagVersionedArtifact
@@ -34,6 +36,30 @@ def search_route(q: str, top_k: int = 5, db: Session = Depends(get_db)):
         }
         for r in results
     ]
+
+
+@router.get("/search/answer")
+def search_answer_route(q: str, top_k: int = 5, db: Session = Depends(get_db)):
+    results = similarity_search(db, q, top_k)
+    try:
+        answer = synthesize_answer(q, results)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=501, detail=str(exc))
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Groq request failed: {exc}")
+    return {
+        "answer": answer,
+        "sources": [
+            {
+                "chunk_id": r["chunk_id"],
+                "text": r["text"],
+                "artifact_id": r["artifact_id"],
+                "commit_ref": r["commit_ref"],
+                "score": r["score"],
+            }
+            for r in results
+        ],
+    }
 
 
 @router.post("/artifacts/{artifact_id}/index")

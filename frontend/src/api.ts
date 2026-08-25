@@ -224,6 +224,15 @@ export function search(query: string, topK = 5): Promise<SearchResult[]> {
   return request(`/search?q=${encodeURIComponent(query)}&top_k=${topK}`)
 }
 
+export interface AnswerResponse {
+  answer: string
+  sources: SearchResult[]
+}
+
+export function getAnswer(query: string, topK = 5): Promise<AnswerResponse> {
+  return request(`/search/answer?q=${encodeURIComponent(query)}&top_k=${topK}`)
+}
+
 export function commitLiveSnapshot(
   artifactId: string,
   branchName: string,
