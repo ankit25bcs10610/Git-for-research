@@ -1,4 +1,5 @@
 export const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+export const CRDT_WS_URL = import.meta.env.VITE_CRDT_WS_URL ?? 'ws://localhost:1234'
 const BASE_URL = `${API_BASE_URL}/api`
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -221,4 +222,12 @@ export function agentEdit(
 
 export function search(query: string, topK = 5): Promise<SearchResult[]> {
   return request(`/search?q=${encodeURIComponent(query)}&top_k=${topK}`)
+}
+
+export function commitLiveSnapshot(
+  artifactId: string,
+  branchName: string,
+  author: string,
+): Promise<{ commit_ref: string }> {
+  return postJson(`/artifacts/${artifactId}/live/commit-snapshot`, { branch_name: branchName, author })
 }

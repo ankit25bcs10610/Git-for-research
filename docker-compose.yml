@@ -28,11 +28,14 @@ services:
       DATABASE_URL: postgresql+psycopg2://gfr:gfr@postgres:5432/gfr
       MOCK_USER_ID: user-1
       EMBEDDING_MODEL_NAME: sentence-transformers/all-MiniLM-L6-v2
+      CRDT_SNAPSHOT_URL: http://crdt-relay:1235
     ports:
       - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
+      crdt-relay:
+        condition: service_started
     volumes:
       - gfr-artifact-store:/data/artifacts
 
@@ -49,8 +52,7 @@ services:
       BACKEND_URL: http://backend:8000
     ports:
       - "1234:1234"
-    depends_on:
-      - backend
+      - "1235:1235"
 
   frontend:
     build:

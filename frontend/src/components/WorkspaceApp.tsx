@@ -8,6 +8,7 @@ import ChangesPanel from './ChangesPanel'
 import AgentEditPanel from './AgentEditPanel'
 import SearchPanel from './SearchPanel'
 import CommitGraph3D from './CommitGraph3D'
+import LiveEditor from './LiveEditor'
 import Card from './ui/Card'
 import { API_BASE_URL } from '../api'
 
@@ -85,6 +86,7 @@ export default function WorkspaceApp({ onBack }: Props) {
               onChanged={bump}
               focusRef={focusedRef}
             />
+            <LiveEditor artifactId={activeArtifactId} onCommitted={bump} />
             <DiffPanel artifactId={activeArtifactId} />
             <MergeRequestsPanel artifactId={activeArtifactId} refreshSignal={refreshSignal} onChanged={bump} />
             <ChangesPanel artifactId={activeArtifactId} refreshSignal={refreshSignal} />

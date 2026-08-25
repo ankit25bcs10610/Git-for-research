@@ -19,4 +19,10 @@ server.listen(PORT, () => {
   console.log(`crdt-relay websocket server listening on port ${PORT}`);
 });
 
+// The snapshot HTTP server (reads live Yjs doc text back out for the
+// versioning bridge) is a separate module but must run in this same
+// process so it shares the in-memory `docs` map the websocket connections
+// populate -- a second process would see an empty map.
+require('./snapshot');
+
 module.exports = { server, wss };
