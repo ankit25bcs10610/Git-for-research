@@ -175,3 +175,114 @@ def test_merge_with_conflicting_edits_returns_single_conflict():
     assert conflict["ours"] == "master version of a\n"
     assert conflict["theirs"] == "feature version of a\n"
     assert conflict["base"] == "content a\n"
+
+
+def test_list_branches_returns_all_local_branch_names():
+    repo_path = tempfile.mkdtemp()
+    init_repo_from_files(repo_path, {"a.txt": "content a\n"})
+    artifact = GitVersionedArtifact(repo_path)
+    artifact.branch("feature", "master")
+
+    assert set(artifact.list_branches()) == {"master", "feature"}
+
+
+def test_merge_base_returns_the_common_ancestor_commit():
+    repo_path = tempfile.mkdtemp()
+    init_repo_from_files(repo_path, {"a.txt": "content a\n"})
+    artifact = GitVersionedArtifact(repo_path)
+    root_commit = artifact.branch_head("master")
+    artifact.branch("feature", "master")
+
+    artifact.checkout_branch("feature")
+    artifact.commit({"a.txt": "feature version\n"}, "user-1", "edit on feature")
+
+    artifact.checkout_branch("master")
+    artifact.commit({"a.txt": "master version\n"}, "user-1", "edit on master")
+
+    assert artifact.merge_base("master", "feature") == root_commit
+
+
+def test_preview_merge_reports_conflicts_without_mutating_the_repo():
+    repo_path = tempfile.mkdtemp()
+    init_repo_from_files(repo_path, {"a.txt": "content a\n"})
+    artifact = GitVersionedArtifact(repo_path)
+    artifact.branch("feature", "master")
+    base_ref = artifact.branch_head("feature")
+
+    artifact.checkout_branch("feature")
+    artifact.commit({"a.txt": "feature version\n"}, "user-1", "edit on feature")
+
+    artifact.checkout_branch("master")
+    master_head = artifact.commit({"a.txt": "master version\n"}, "user-1", "edit on master")
+
+    result = artifact.preview_merge(base_ref, "master", "feature")
+
+    assert result["conflicts"][0]["path"] == "a.txt"
+    # Must be read-only: branch head unchanged, no new commit written.
+    assert artifact.branch_head("master") == master_head
+
+
+def test_preview_merge_reports_no_conflicts_for_disjoint_edits():
+    repo_path = tempfile.mkdtemp()
+    init_repo_from_files(repo_path, {"a.txt": "content a\n", "b.txt": "content b\n"})
+    artifact = GitVersionedArtifact(repo_path)
+    artifact.branch("feature", "master")
+    base_ref = artifact.branch_head("feature")
+
+    artifact.checkout_branch("feature")
+    artifact.commit({"a.txt": "content a edited on feature\n"}, "user-1", "edit a on feature")
+
+    artifact.checkout_branch("master")
+    artifact.commit({"b.txt": "content b edited on master\n"}, "user-1", "edit b on master")
+
+    result = artifact.preview_merge(base_ref, "master", "feature")
+
+    assert result["conflicts"] == []
+
+
+def test_merge_with_resolutions_for_every_conflicting_path_commits_the_resolved_content():
+    repo_path = tempfile.mkdtemp()
+    init_repo_from_files(repo_path, {"a.txt": "content a\n"})
+    artifact = GitVersionedArtifact(repo_path)
+    artifact.branch("feature", "master")
+    base_ref = artifact.branch_head("feature")
+
+    artifact.checkout_branch("feature")
+    feature_commit = artifact.commit({"a.txt": "feature version\n"}, "user-1", "edit on feature")
+
+    artifact.checkout_branch("master")
+    master_commit = artifact.commit({"a.txt": "master version\n"}, "user-1", "edit on master")
+
+    result = artifact.merge(base_ref, "master", "feature", resolutions={"a.txt": "resolved version\n"})
+
+    assert result["merged"] is True
+    merged_content = artifact.get_content("master")
+    assert merged_content["a.txt"] == "resolved version\n"
+    merge_commit_id = artifact.branch_head("master")
+    merge_commit = artifact.repo[merge_commit_id]
+    assert {str(p) for p in merge_commit.parent_ids} == {master_commit, feature_commit}
+
+
+def test_merge_with_incomplete_resolutions_stays_blocked():
+    repo_path = tempfile.mkdtemp()
+    init_repo_from_files(repo_path, {"a.txt": "content a\n", "b.txt": "content b\n"})
+    artifact = GitVersionedArtifact(repo_path)
+    artifact.branch("feature", "master")
+    base_ref = artifact.branch_head("feature")
+
+    artifact.checkout_branch("feature")
+    artifact.commit(
+        {"a.txt": "feature a\n", "b.txt": "feature b\n"}, "user-1", "edit both on feature"
+    )
+
+    artifact.checkout_branch("master")
+    master_commit = artifact.commit(
+        {"a.txt": "master a\n", "b.txt": "master b\n"}, "user-1", "edit both on master"
+    )
+
+    # Only resolving one of the two conflicting paths.
+    result = artifact.merge(base_ref, "master", "feature", resolutions={"a.txt": "resolved a\n"})
+
+    assert result["merged"] is False
+    assert len(result["conflicts"]) == 2
+    assert artifact.branch_head("master") == master_commit

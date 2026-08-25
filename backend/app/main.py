@@ -4,7 +4,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import routes_collab, routes_crdt, routes_ingestion, routes_retrieval, routes_users, routes_versioning
+from app.api import (
+    routes_codebase,
+    routes_collab,
+    routes_crdt,
+    routes_ingestion,
+    routes_retrieval,
+    routes_users,
+    routes_versioning,
+)
 from app.db.bootstrap import ensure_schema
 
 
@@ -33,6 +41,7 @@ app.include_router(routes_collab.router, prefix="/api", tags=["collaboration"])
 app.include_router(routes_retrieval.router, prefix="/api", tags=["retrieval"])
 app.include_router(routes_users.router, prefix="/api", tags=["users"])
 app.include_router(routes_crdt.router, prefix="/api", tags=["crdt"])
+app.include_router(routes_codebase.router, prefix="/api", tags=["codebase"])
 
 
 @app.get("/health")

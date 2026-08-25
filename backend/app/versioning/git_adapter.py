@@ -8,8 +8,14 @@ _STATUS_MAP = {
     pygit2.GIT_DELTA_MODIFIED: "modified",
 }
 
+ARTIFACT_STORE_PATH = os.environ.get("ARTIFACT_STORE_PATH", "/data/artifacts")
 
-def init_repo_from_files(repo_path: str, files: dict) -> None:
+
+def repo_path_for_artifact(artifact_id: str) -> str:
+    return os.path.join(ARTIFACT_STORE_PATH, artifact_id)
+
+
+def init_repo_from_files(repo_path: str, files: dict, author: str = "system") -> None:
     os.makedirs(repo_path, exist_ok=True)
     repo = pygit2.init_repository(repo_path)
     for path, content in files.items():
@@ -22,7 +28,7 @@ def init_repo_from_files(repo_path: str, files: dict) -> None:
     index.add_all()
     index.write()
     tree = index.write_tree()
-    signature = pygit2.Signature("system", "system@local")
+    signature = pygit2.Signature(author, f"{author}@local")
     repo.create_commit("HEAD", signature, signature, "initial commit", tree, [])
 
 
@@ -80,6 +86,14 @@ class GitVersionedArtifact:
         branch_ref = self.repo.branches.local[name]
         return str(branch_ref.target)
 
+    def list_branches(self) -> list:
+        return list(self.repo.branches.local)
+
+    def merge_base(self, ref_a: str, ref_b: str) -> str:
+        commit_a = self._resolve_commit(ref_a)
+        commit_b = self._resolve_commit(ref_b)
+        return str(self.repo.merge_base(commit_a.id, commit_b.id))
+
     def checkout_branch(self, name: str) -> None:
         branch_ref = self.repo.branches.local[name]
         self.repo.set_head(branch_ref.name)
@@ -101,17 +115,15 @@ class GitVersionedArtifact:
         walk(commit.tree)
         return result
 
-    def merge(self, base_ref: str, ours_ref: str, theirs_ref: str) -> dict:
+    def _merge_index_and_conflicts(self, base_ref: str, ours_ref: str, theirs_ref: str):
         base_commit = self._resolve_commit(base_ref)
         ours_commit = self._resolve_commit(ours_ref)
         theirs_commit = self._resolve_commit(theirs_ref)
 
-        merge_index = self.repo.merge_trees(
-            base_commit.tree, ours_commit.tree, theirs_commit.tree
-        )
+        merge_index = self.repo.merge_trees(base_commit.tree, ours_commit.tree, theirs_commit.tree)
 
+        conflicts = []
         if merge_index.conflicts is not None:
-            conflicts = []
             for ancestor, ours, theirs in merge_index.conflicts:
                 path = None
                 ours_text = None
@@ -134,7 +146,28 @@ class GitVersionedArtifact:
                         "base": base_text,
                     }
                 )
-            return {"merged": False, "conflicts": conflicts}
+        return merge_index, ours_commit, theirs_commit, conflicts
+
+    def preview_merge(self, base_ref: str, ours_ref: str, theirs_ref: str) -> dict:
+        # Read-only: merge_trees() computes an in-memory index and never
+        # touches the repo's refs/working tree, so this is safe to call
+        # without committing or moving any branch.
+        _, _, _, conflicts = self._merge_index_and_conflicts(base_ref, ours_ref, theirs_ref)
+        return {"conflicts": conflicts}
+
+    def merge(self, base_ref: str, ours_ref: str, theirs_ref: str, resolutions: dict = None) -> dict:
+        merge_index, ours_commit, theirs_commit, conflicts = self._merge_index_and_conflicts(
+            base_ref, ours_ref, theirs_ref
+        )
+
+        if conflicts:
+            conflict_paths = {c["path"] for c in conflicts}
+            if resolutions is None or set(resolutions.keys()) != conflict_paths:
+                return {"merged": False, "conflicts": conflicts}
+            for path, resolved_text in resolutions.items():
+                del merge_index.conflicts[path]
+                blob_oid = self.repo.create_blob(resolved_text.encode("utf-8"))
+                merge_index.add(pygit2.IndexEntry(path, blob_oid, pygit2.GIT_FILEMODE_BLOB))
 
         merge_tree_id = merge_index.write_tree(self.repo)
         signature = pygit2.Signature("system", "system@local")

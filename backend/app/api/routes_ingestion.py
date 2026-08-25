@@ -1,4 +1,5 @@
 import json
+import zipfile
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -7,11 +8,13 @@ from app.api.deps import get_db, require_user, tokenizer_for_type
 from app.artifacts import create_artifact
 from app.ingestion.chatgpt_parser import parse_chatgpt_export
 from app.ingestion.claude_parser import parse_claude_export
+from app.ingestion.codebase_parser import parse_codebase_zip
 from app.ingestion.markdown_parser import parse_markdown
 from app.ingestion.pdf_parser import parse_pdf
-from app.retrieval.chunker import chunk_messages, chunk_prose
+from app.retrieval.chunker import chunk_code, chunk_messages, chunk_prose
 from app.retrieval.query import index_chunks
 from app.versioning.dag_adapter import DagVersionedArtifact
+from app.versioning.git_adapter import GitVersionedArtifact, init_repo_from_files, repo_path_for_artifact
 
 router = APIRouter()
 
@@ -93,4 +96,25 @@ async def ingest_pdf(
 
     artifact_id = create_artifact(db, workspace_id, parsed.artifact_type, parsed.name)
     commit_ref = _commit_and_index(db, artifact_id, parsed.artifact_type, joined_content, author)
+    return {"artifact_id": artifact_id, "commit_ref": commit_ref}
+
+
+@router.post("/workspaces/{workspace_id}/artifacts/ingest/codebase")
+async def ingest_codebase(
+    workspace_id: str, file: UploadFile = File(...), author: str = Form(...), db: Session = Depends(get_db)
+):
+    require_user(db, author)
+    raw = await file.read()
+    try:
+        parsed = parse_codebase_zip(raw)
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(status_code=400, detail=f"invalid zip archive: {exc}")
+
+    artifact_id = create_artifact(db, workspace_id, parsed.artifact_type, parsed.name)
+    init_repo_from_files(repo_path_for_artifact(artifact_id), parsed.content, author)
+    artifact = GitVersionedArtifact(repo_path_for_artifact(artifact_id))
+    commit_ref = artifact.branch_head("master")
+
+    index_chunks(db, artifact_id, commit_ref, chunk_code(parsed.content))
+
     return {"artifact_id": artifact_id, "commit_ref": commit_ref}

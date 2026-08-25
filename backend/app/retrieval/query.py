@@ -4,9 +4,14 @@ from app.db.models import Chunk
 from app.retrieval.embeddings import embed_text
 
 
-def index_chunks(session, artifact_id: str, commit_ref: str, texts: list[str]) -> list[str]:
+def index_chunks(session, artifact_id: str, commit_ref: str, texts: list) -> list[str]:
     chunk_ids: list[str] = []
-    for index, text in enumerate(texts):
+    for index, item in enumerate(texts):
+        # chunk_code() returns (span_label, text) tuples (e.g.
+        # "main.py::add") instead of plain strings, unlike chunk_prose()/
+        # chunk_messages() -- use that label as the span when present,
+        # falling back to a bare index for plain-string chunks.
+        span, text = item if isinstance(item, tuple) else (str(index), item)
         chunk_id = str(uuid.uuid4())
         chunk = Chunk(
             id=chunk_id,
@@ -14,7 +19,7 @@ def index_chunks(session, artifact_id: str, commit_ref: str, texts: list[str]) -
             commit_ref=commit_ref,
             text=text,
             embedding=embed_text(text),
-            span=str(index),
+            span=span,
         )
         session.add(chunk)
         chunk_ids.append(chunk_id)
