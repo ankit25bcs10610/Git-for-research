@@ -9,13 +9,14 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
+    "framer-motion": "^11.18.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "three": "^0.160.0",
     "y-websocket": "^3.1.0",
-    "yjs": "^13.6.32",
-    "@supabase/supabase-js": "^2.45.4",
-    "motion": "^12.0.0",
-    "lucide-react": "^0.469.0"
+    "yjs": "^13.6.32"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.4.2",
