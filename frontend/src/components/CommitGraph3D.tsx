@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Html, Line, OrbitControls } from '@react-three/drei'
 import { motion } from 'framer-motion'
-import { getArtifactGraph, type ArtifactGraph, type GraphCommit } from '../api'
+import {
+  getArtifactGraph,
+  type ArtifactGraph,
+  type GraphCommit,
+  type MergeRequestSummary,
+} from '../api'
 
 interface Props {
   artifactId: string
@@ -14,11 +19,50 @@ const LANE_COLORS = ['#22d3ee', '#a78bfa', '#fb923c', '#f472b6', '#4ade80', '#fa
 const LANE_SPACING = 1.7
 const DEPTH_SPACING = 1.3
 
+const MR_STATUS_COLORS: Record<MergeRequestSummary['status'], string> = {
+  open: '#f59e0b',
+  merged: '#34d399',
+  rejected: '#64748b',
+}
+
 interface LaidOutCommit {
   commit: GraphCommit
   position: [number, number, number]
   lane: number
   isMerge: boolean
+}
+
+export interface MergeRequestEdge {
+  id: string
+  sourceBranch: string
+  targetBranch: string
+  status: MergeRequestSummary['status']
+  sourcePosition: [number, number, number]
+  targetPosition: [number, number, number]
+}
+
+export function layoutMergeRequestEdges(
+  graph: ArtifactGraph,
+  positionById: Map<string, [number, number, number]>,
+): MergeRequestEdge[] {
+  const headCommitIdByBranch = new Map(graph.branches.map((b) => [b.name, b.head_commit_id]))
+  const edges: MergeRequestEdge[] = []
+  for (const mr of graph.merge_requests) {
+    const sourceHead = headCommitIdByBranch.get(mr.source_branch)
+    const targetHead = headCommitIdByBranch.get(mr.target_branch)
+    const sourcePosition = sourceHead ? positionById.get(sourceHead) : undefined
+    const targetPosition = targetHead ? positionById.get(targetHead) : undefined
+    if (!sourcePosition || !targetPosition) continue
+    edges.push({
+      id: mr.id,
+      sourceBranch: mr.source_branch,
+      targetBranch: mr.target_branch,
+      status: mr.status,
+      sourcePosition,
+      targetPosition,
+    })
+  }
+  return edges
 }
 
 function jitter(id: string): number {
@@ -135,6 +179,7 @@ export default function CommitGraph3D({ artifactId, refreshSignal, onSelectCommi
   }
 
   const positionById = new Map(layout.nodes.map((n) => [n.commit.id, n.position]))
+  const mergeRequestEdges = layoutMergeRequestEdges(graph!, positionById)
 
   return (
     <motion.div
@@ -155,6 +200,34 @@ export default function CommitGraph3D({ artifactId, refreshSignal, onSelectCommi
         {layout.nodes.map((node) => (
           <CommitNode key={node.commit.id} node={node} onSelect={onSelectCommit} />
         ))}
+        {mergeRequestEdges.map((edge) => {
+          const color = MR_STATUS_COLORS[edge.status]
+          const midpoint: [number, number, number] = [
+            (edge.sourcePosition[0] + edge.targetPosition[0]) / 2,
+            (edge.sourcePosition[1] + edge.targetPosition[1]) / 2,
+            (edge.sourcePosition[2] + edge.targetPosition[2]) / 2,
+          ]
+          return (
+            <group key={edge.id}>
+              <Line
+                points={[edge.sourcePosition, edge.targetPosition]}
+                color={color}
+                lineWidth={2}
+                dashed
+                dashSize={0.15}
+                gapSize={0.1}
+              />
+              <Html position={midpoint} distanceFactor={8} style={{ pointerEvents: 'none' }}>
+                <div
+                  className="whitespace-nowrap rounded-md border bg-slate-950/95 px-2 py-0.5 text-[10px] font-medium shadow-lg"
+                  style={{ borderColor: color, color }}
+                >
+                  MR: {edge.sourceBranch} → {edge.targetBranch} ({edge.status})
+                </div>
+              </Html>
+            </group>
+          )
+        })}
         <OrbitControls enablePan enableZoom enableRotate makeDefault />
       </Canvas>
     </motion.div>
