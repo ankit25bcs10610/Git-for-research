@@ -27,6 +27,7 @@ def test_all_tables_are_created():
         "provenance_edges",
         "merge_requests",
         "last_seen",
+        "users",
     }
 
     assert expected_tables.issubset(table_names)
