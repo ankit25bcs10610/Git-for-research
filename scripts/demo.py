@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
 from sqlalchemy import inspect as sa_inspect
 
+from app.artifacts import create_artifact
 from app.db.base import Base, engine, get_session
 from app.ingestion.chatgpt_parser import parse_chatgpt_export
 from app.ingestion.markdown_parser import parse_markdown
@@ -43,6 +44,7 @@ from app.collab.agent_editor import agent_edit
 from app.retrieval.chunker import chunk_prose, chunk_messages
 from app.retrieval.query import index_chunks, similarity_search
 from app.retrieval.provenance import add_provenance_edge, trace_provenance
+from app.users import create_user, get_user_by_username
 
 import uuid
 
@@ -100,7 +102,22 @@ def main() -> None:
     print("Schema OK.")
 
     with get_session() as session:
-        artifact_id = str(uuid.uuid4())
+        # This script calls the versioning/collab modules directly instead of
+        # going through the HTTP route layer (see the module docstring), so
+        # routes_versioning.py's require_user() check never runs -- without
+        # this, every commit below would be attributed to "user-1" even
+        # though no such row exists in `users`.
+        try:
+            get_user_by_username(session, "user-1")
+        except ValueError:
+            create_user(session, "user-1", "Demo User")
+
+        # get_merge_request_diff/merge_merge_request look up the artifact's
+        # real row (to pick a tokenizer by type -- see merge_requests.py), so
+        # a bare uuid with no `artifacts` row behind it 404s once a merge
+        # request is opened on it below.
+        workspace_id = str(uuid.uuid4())
+        artifact_id = create_artifact(session, workspace_id, "doc", "atp-notes.md")
 
         # --- 1. Ingestion -------------------------------------------------
         header("1. Ingestion")
@@ -155,7 +172,7 @@ def main() -> None:
 
         # --- 4. Live merge conflict ------------------------------------------
         header("4. Live merge conflict")
-        mr_id = create_merge_request(session, artifact_id, "edit-atp-location", "main")
+        mr_id = create_merge_request(session, artifact_id, "edit-atp-location", "main", "user-1")
         print(f"Opened merge request {mr_id}: edit-atp-location -> main")
 
         diff_result = get_merge_request_diff(session, mr_id)
@@ -167,7 +184,7 @@ def main() -> None:
         print(f"  ours:     {conflict['ours']}")
         print(f"  theirs:   {conflict['theirs']}")
 
-        blocked = merge_merge_request(session, mr_id, resolutions=None)
+        blocked = merge_merge_request(session, mr_id, resolutions=None, merged_by="user-1")
         assert blocked is False, "merge should be blocked until the conflict is resolved"
         print("\nmerge_merge_request(resolutions=None) correctly returned False -- blocked on the open conflict.")
 
@@ -177,6 +194,7 @@ def main() -> None:
             session,
             mr_id,
             resolutions={conflict["position"]: "The paragraph under study describes ATP production during oxidative phosphorylation in the mitochondrial matrix."},
+            merged_by="user-1",
         )
         assert resolved is True, "merge should succeed once the conflict is resolved"
         print("Merge succeeded.")
@@ -200,11 +218,13 @@ def main() -> None:
         def fake_llm_call(instruction: str, current_content: str) -> str:
             return current_content + "\n\n## Follow-up\n\nA deeper breakdown by contributor is available on request."
 
-        agent_mr_id = agent_edit(session, artifact_id, "main", "Append a follow-up section.", fake_llm_call)
+        agent_mr_id = agent_edit(
+            session, artifact_id, "main", "Append a follow-up section.", fake_llm_call, "user-1"
+        )
         agent_mr = get_merge_request_diff(session, agent_mr_id)
         print(f"Agent opened merge request {agent_mr_id} (status: open, awaiting human review)")
         print(f"Agent's proposed diff has {len(agent_mr['conflicts'])} conflicts (0 expected, since main hasn't moved since the agent forked)")
-        agent_merged = merge_merge_request(session, agent_mr_id, resolutions=None)
+        agent_merged = merge_merge_request(session, agent_mr_id, resolutions=None, merged_by="user-1")
         print(f"Human reviewer approves -> merge_merge_request returned {agent_merged}")
         assert agent_merged is True
 

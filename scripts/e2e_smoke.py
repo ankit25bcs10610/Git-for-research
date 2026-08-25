@@ -27,7 +27,7 @@ import uuid
 import requests
 
 BASE_URL = os.environ.get("GFR_BASE_URL", "http://localhost:8000")
-USER_ID = "user-1"
+USER_ID = f"smoke-test-{uuid.uuid4().hex[:8]}"
 WORKSPACE_ID = str(uuid.uuid4())
 
 CHATGPT_EXPORT_FIXTURE = """[
@@ -85,6 +85,14 @@ def step(title: str) -> None:
     print(f"\n=== {title} ===")
 
 
+def create_user() -> None:
+    step("Step 0: create the smoke-test user")
+    response = requests.post(f"{BASE_URL}/api/users", json={"username": USER_ID})
+    if response.status_code != 200:
+        fail(f"user creation returned status {response.status_code}: {response.text}")
+    print(f"created user username={USER_ID}")
+
+
 def ingest_markdown() -> str:
     step("Step 1a: ingest markdown fixture")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
@@ -94,6 +102,7 @@ def ingest_markdown() -> str:
         response = requests.post(
             f"{BASE_URL}/api/workspaces/{WORKSPACE_ID}/artifacts/ingest/markdown",
             files={"file": ("research_notes.md", fh, "text/markdown")},
+            data={"author": USER_ID},
         )
     os.remove(path)
     if response.status_code != 200:
@@ -115,6 +124,7 @@ def ingest_chatgpt() -> str:
         response = requests.post(
             f"{BASE_URL}/api/workspaces/{WORKSPACE_ID}/artifacts/ingest/chatgpt",
             files={"file": ("chat_export.json", fh, "application/json")},
+            data={"author": USER_ID},
         )
     os.remove(path)
     if response.status_code != 200:
@@ -174,7 +184,7 @@ def create_conflicting_branch_and_merge(markdown_artifact_id: str) -> None:
     step("Step 2d: open a merge request from the branch into main")
     merge_request_response = requests.post(
         f"{BASE_URL}/api/artifacts/{markdown_artifact_id}/merge-requests",
-        json={"source_branch": "edit-atp-paragraph", "target_branch": "main"},
+        json={"source_branch": "edit-atp-paragraph", "target_branch": "main", "author": USER_ID},
     )
     if merge_request_response.status_code != 200:
         fail(f"merge request creation returned status {merge_request_response.status_code}: {merge_request_response.text}")
@@ -215,6 +225,8 @@ def run_search(expected_artifact_ids: list) -> None:
 def main() -> None:
     print("Running Git for Research end to end smoke test against", BASE_URL)
     print("This script assumes the backend is already running (docker compose, or a local uvicorn).")
+
+    create_user()
 
     markdown_artifact_id = ingest_markdown()
     chatgpt_artifact_id = ingest_chatgpt()
