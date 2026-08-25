@@ -1,12 +1,20 @@
+import json
+
 from app.collab.merge_requests import create_merge_request
 from app.versioning.dag_adapter import DagVersionedArtifact
 from app.versioning.dag_store import get_branch_head, get_commit
-from app.versioning.diff_engine import tokenize_paragraphs
-from app.db.models import MergeRequest
+from app.versioning.diff_engine import tokenize_messages, tokenize_paragraphs
+from app.db.models import Artifact, MergeRequest
+
+
+def _insert_artifact(session, artifact_id, artifact_type="doc"):
+    session.add(Artifact(id=artifact_id, workspace_id="ws-1", type=artifact_type, name="artifact"))
+    session.commit()
 
 
 def test_create_merge_request_records_base_commit_ref(db_session):
     artifact_id = "artifact-mr-1"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -32,6 +40,7 @@ def test_get_merge_request_diff_reports_no_conflicts_for_disjoint_edits(db_sessi
     from app.versioning.dag_store import update_branch_head
 
     artifact_id = "artifact-mr-2"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -56,6 +65,7 @@ def test_merge_merge_request_advances_target_head_when_no_conflicts(db_session):
     from app.versioning.dag_store import update_branch_head
 
     artifact_id = "artifact-mr-3"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -89,6 +99,7 @@ def test_merge_merge_request_blocks_on_conflict_until_resolved(db_session):
     from app.versioning.dag_store import update_branch_head
 
     artifact_id = "artifact-mr-4"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -131,6 +142,7 @@ def test_merge_merge_request_on_already_merged_mr_returns_false_and_does_not_mov
     from app.versioning.dag_store import update_branch_head
 
     artifact_id = "artifact-mr-5"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -170,6 +182,7 @@ def test_merge_merge_request_on_rejected_mr_returns_false_and_does_not_flip_to_m
     from app.versioning.dag_store import update_branch_head
 
     artifact_id = "artifact-mr-6"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -207,6 +220,7 @@ def test_merge_merge_request_rejects_resolution_at_wrong_in_range_position(db_se
     from app.versioning.dag_store import update_branch_head
 
     artifact_id = "artifact-mr-7"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -250,6 +264,7 @@ def test_merge_merge_request_rejects_resolution_at_out_of_range_position(db_sess
     from app.versioning.dag_store import update_branch_head
 
     artifact_id = "artifact-mr-8"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -287,6 +302,7 @@ def test_merge_merge_request_rejects_resolutions_missing_a_conflict_position(db_
     from app.versioning.dag_store import update_branch_head
 
     artifact_id = "artifact-mr-9"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Para A.\n\nPara B.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -319,6 +335,7 @@ def test_merge_merge_request_returns_false_and_does_not_clobber_concurrent_head_
     from app.versioning.dag_store import update_branch_head
 
     artifact_id = "artifact-mr-10"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -379,6 +396,7 @@ def test_merge_merge_request_resolved_conflict_commit_has_both_parents(db_sessio
     from app.versioning.dag_store import update_branch_head
 
     artifact_id = "artifact-mr-11"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -430,6 +448,7 @@ def test_merge_merge_request_resolved_conflict_source_reachable_via_all_parents(
     from app.versioning.dag_store import update_branch_head
 
     artifact_id = "artifact-mr-12"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -491,6 +510,7 @@ def test_merge_merge_request_accepts_string_keyed_resolutions(db_session):
     from app.versioning.dag_store import update_branch_head
 
     artifact_id = "artifact-mr-13"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -533,6 +553,7 @@ def test_merge_merge_request_rejects_non_numeric_string_keyed_resolutions(db_ses
     from app.versioning.dag_store import update_branch_head
 
     artifact_id = "artifact-mr-14"
+    _insert_artifact(db_session, artifact_id)
     artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_paragraphs)
     root = artifact.commit("Intro paragraph.\n\nBody paragraph.", "user-1", "root commit", None)
     artifact.branch("main", root)
@@ -558,3 +579,98 @@ def test_merge_merge_request_rejects_non_numeric_string_keyed_resolutions(db_ses
     assert result is False
     assert mr.status == "open"
     assert head_after == main_commit
+
+
+def test_get_merge_request_diff_uses_message_tokenizer_for_chat_artifacts(db_session):
+    """Regression test for the chat merge-conflict bug.
+
+    merge_requests.py used to hardcode the paragraph tokenizer for every
+    artifact type regardless of `artifact.type`. Chat content is a single-line
+    JSON blob with no blank lines, so `tokenize_paragraphs` collapsed it into
+    ONE token -- meaning any two edits anywhere in the conversation, even to
+    completely different messages, were reported as a single conflict
+    spanning the whole chat. With the message tokenizer selected correctly,
+    disjoint edits to different messages must not conflict.
+    """
+    from app.collab.merge_requests import create_merge_request, get_merge_request_diff
+    from app.versioning.dag_store import update_branch_head
+
+    artifact_id = "artifact-mr-chat-1"
+    _insert_artifact(db_session, artifact_id, artifact_type="chat")
+    artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_messages)
+
+    base_json = json.dumps(
+        [{"role": "user", "text": "hi"}, {"role": "assistant", "text": "hello"}]
+    )
+    root = artifact.commit(base_json, "user-1", "root commit", None)
+    artifact.branch("main", root)
+    artifact.branch("feature-chat", root)
+
+    # main edits only the assistant's message.
+    main_json = json.dumps(
+        [{"role": "user", "text": "hi"}, {"role": "assistant", "text": "hello there"}]
+    )
+    main_commit = artifact.commit(main_json, "user-1", "main edit", root)
+    update_branch_head(db_session, artifact_id, "main", main_commit)
+
+    # feature-chat edits only the user's message -- a disjoint edit.
+    feature_json = json.dumps(
+        [{"role": "user", "text": "hi you"}, {"role": "assistant", "text": "hello"}]
+    )
+    feature_commit = artifact.commit(feature_json, "user-1", "feature edit", root)
+    update_branch_head(db_session, artifact_id, "feature-chat", feature_commit)
+
+    mr_id = create_merge_request(db_session, artifact_id, "feature-chat", "main")
+    result = get_merge_request_diff(db_session, mr_id)
+
+    assert result["conflicts"] == []
+
+
+def test_merge_merge_request_chat_clean_merge_produces_valid_message_json(db_session):
+    """Regression test for the chat merge-conflict bug.
+
+    A clean (no-conflict) merge on a chat artifact must produce content that
+    round-trips through `json.loads` back into the merged messages -- not
+    "\\n\\n"-joined `"role: text"` strings, which isn't valid JSON at all.
+    """
+    from app.collab.merge_requests import create_merge_request, merge_merge_request
+    from app.versioning.dag_store import update_branch_head
+
+    artifact_id = "artifact-mr-chat-2"
+    _insert_artifact(db_session, artifact_id, artifact_type="chat")
+    artifact = DagVersionedArtifact(db_session, artifact_id, tokenize_messages)
+
+    base_json = json.dumps(
+        [{"role": "user", "text": "hi"}, {"role": "assistant", "text": "hello"}]
+    )
+    root = artifact.commit(base_json, "user-1", "root commit", None)
+    artifact.branch("main", root)
+    artifact.branch("feature-chat-2", root)
+
+    main_json = json.dumps(
+        [{"role": "user", "text": "hi"}, {"role": "assistant", "text": "hello there"}]
+    )
+    main_commit = artifact.commit(main_json, "user-1", "main edit", root)
+    update_branch_head(db_session, artifact_id, "main", main_commit)
+
+    feature_json = json.dumps(
+        [{"role": "user", "text": "hi you"}, {"role": "assistant", "text": "hello"}]
+    )
+    feature_commit = artifact.commit(feature_json, "user-1", "feature edit", root)
+    update_branch_head(db_session, artifact_id, "feature-chat-2", feature_commit)
+
+    mr_id = create_merge_request(db_session, artifact_id, "feature-chat-2", "main")
+    result = merge_merge_request(db_session, mr_id, None)
+    assert result is True
+
+    new_head = get_branch_head(db_session, artifact_id, "main")
+    merged_content = artifact.get_content(new_head)
+    merged_messages = json.loads(merged_content)
+
+    assert merged_messages == [
+        {"role": "user", "text": "hi you"},
+        {"role": "assistant", "text": "hello there"},
+    ]
+
+    merge_commit = get_commit(db_session, new_head)
+    assert set(merge_commit.parent_ids) == {main_commit, feature_commit}

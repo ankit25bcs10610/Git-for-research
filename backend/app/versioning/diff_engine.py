@@ -13,6 +13,22 @@ def tokenize_messages(content_json: str) -> list[str]:
     return [f"{message['role']}: {message['text']}" for message in messages]
 
 
+def tokenizer_for_type(artifact_type: str):
+    if artifact_type == "chat":
+        return tokenize_messages
+    return tokenize_paragraphs
+
+
+def join_tokens_for_type(artifact_type: str, tokens: list[str]) -> str:
+    if artifact_type == "chat":
+        messages = []
+        for token in tokens:
+            role, _, text = token.partition(": ")
+            messages.append({"role": role, "text": text})
+        return json.dumps(messages)
+    return "\n\n".join(tokens)
+
+
 def diff_tokens(tokens_a: list[str], tokens_b: list[str]) -> list[dict]:
     matcher = difflib.SequenceMatcher(a=tokens_a, b=tokens_b, autojunk=False)
     result = []

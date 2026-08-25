@@ -1,5 +1,6 @@
 import uuid
 
+from app.artifacts import get_artifact
 from app.db.models import MergeRequest
 from app.versioning.dag_adapter import DagVersionedArtifact
 from app.versioning.dag_store import (
@@ -9,19 +10,8 @@ from app.versioning.dag_store import (
     get_commit,
     update_branch_head,
 )
-from app.versioning.diff_engine import tokenize_paragraphs
+from app.versioning.diff_engine import join_tokens_for_type, tokenizer_for_type
 from app.versioning.merge_engine import diff3_merge
-
-# `DagVersionedArtifact.merge()` only auto-commits a clean (no-conflict) merge
-# when `self.tokenizer is tokenize_paragraphs` -- an identity check against
-# the exact function object imported from app.versioning.diff_engine, not a
-# structural/behavioral check. Re-implementing an equivalent
-# `text.split("\n\n")` tokenizer locally (as an earlier draft of this module
-# did) would make that identity check always fail, silently dropping
-# "merge_commit_id" from `artifact.merge(...)`'s return value and causing a
-# KeyError in merge_merge_request's no-conflict path. Using the real
-# tokenize_paragraphs here keeps identity intact.
-_paragraph_tokenizer = tokenize_paragraphs
 
 
 def _ancestor_chain(session, ref: str) -> list:
@@ -63,7 +53,9 @@ def create_merge_request(session, artifact_id: str, source_branch: str, target_b
 
 def get_merge_request_diff(session, mr_id: str) -> dict:
     mr = session.get(MergeRequest, mr_id)
-    artifact = DagVersionedArtifact(session, mr.artifact_id, _paragraph_tokenizer)
+    a = get_artifact(session, mr.artifact_id)
+    tokenizer = tokenizer_for_type(a.type)
+    artifact = DagVersionedArtifact(session, mr.artifact_id, tokenizer)
 
     base_content = artifact.get_content(mr.base_commit_ref)
     target_head = artifact.branch_head(mr.target_branch)
@@ -71,9 +63,9 @@ def get_merge_request_diff(session, mr_id: str) -> dict:
     target_content = artifact.get_content(target_head)
     source_content = artifact.get_content(source_head)
 
-    base_tokens = _paragraph_tokenizer(base_content)
-    ours_tokens = _paragraph_tokenizer(target_content)
-    theirs_tokens = _paragraph_tokenizer(source_content)
+    base_tokens = tokenizer(base_content)
+    ours_tokens = tokenizer(target_content)
+    theirs_tokens = tokenizer(source_content)
 
     return diff3_merge(base_tokens, ours_tokens, theirs_tokens)
 
@@ -83,7 +75,9 @@ def merge_merge_request(session, mr_id: str, resolutions=None) -> bool:
     if mr.status != "open":
         return False
 
-    artifact = DagVersionedArtifact(session, mr.artifact_id, _paragraph_tokenizer)
+    a = get_artifact(session, mr.artifact_id)
+    tokenizer = tokenizer_for_type(a.type)
+    artifact = DagVersionedArtifact(session, mr.artifact_id, tokenizer)
 
     diff_result = get_merge_request_diff(session, mr_id)
     conflicts = diff_result["conflicts"]
@@ -96,7 +90,24 @@ def merge_merge_request(session, mr_id: str, resolutions=None) -> bool:
 
     if not conflicts:
         merge_result = artifact.merge(mr.base_commit_ref, target_head, source_head)
-        merge_commit_id = merge_result["merge_commit_id"]
+        if "merge_commit_id" in merge_result:
+            merge_commit_id = merge_result["merge_commit_id"]
+        else:
+            # DagVersionedArtifact.merge() only auto-commits when its tokenizer
+            # is tokenize_paragraphs (see dag_adapter.py) -- for a chat
+            # artifact's message tokenizer it stops after diff3_merge, so the
+            # commit must be built here instead, mirroring the resolved-
+            # conflict path below (both branch heads as parents).
+            merge_content = join_tokens_for_type(a.type, merge_result["merged_tokens"])
+            blob_hash = create_blob(session, merge_content)
+            merge_commit_id = create_commit(
+                session,
+                mr.artifact_id,
+                blob_hash,
+                [target_head, source_head],
+                "merge-bot",
+                f"Merge {mr.source_branch} into {mr.target_branch}",
+            )
     else:
         # `resolutions` arrives with string keys whenever it has been
         # round-tripped through JSON (e.g. an HTTP request body deserialized
@@ -117,7 +128,7 @@ def merge_merge_request(session, mr_id: str, resolutions=None) -> bool:
         merged_tokens = list(diff_result["merged_tokens"])
         for position, resolved_text in resolutions.items():
             merged_tokens[position] = resolved_text
-        merge_content = "\n\n".join(merged_tokens)
+        merge_content = join_tokens_for_type(a.type, merged_tokens)
         # A resolved-conflict commit must record BOTH branches as parents,
         # the same way DagVersionedArtifact.merge()'s clean-merge auto-commit
         # path does (see dag_adapter.py's `create_commit(..., [ours_commit_id,
