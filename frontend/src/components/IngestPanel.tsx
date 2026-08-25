@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ingestArtifact, type IngestKind } from '../api'
+import { useProfile } from '../profile/ProfileContext'
 import Card from './ui/Card'
 
 interface Props {
@@ -18,6 +19,7 @@ const INPUT =
   'rounded-md border border-stone-300 bg-white px-2 py-1 text-sm text-stone-900 focus:border-cyan-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
 
 export default function IngestPanel({ workspaceId, onIngested }: Props) {
+  const { profile } = useProfile()
   const [kind, setKind] = useState<IngestKind>('markdown')
   const [file, setFile] = useState<File | null>(null)
   const [status, setStatus] = useState<string>('')
@@ -29,7 +31,7 @@ export default function IngestPanel({ workspaceId, onIngested }: Props) {
     setBusy(true)
     setStatus('')
     try {
-      const artifactIds = await ingestArtifact(workspaceId, kind, file)
+      const artifactIds = await ingestArtifact(workspaceId, kind, file, profile?.username ?? '')
       setStatus(`Ingested: ${artifactIds.join(', ')}`)
       onIngested(artifactIds)
       setFile(null)

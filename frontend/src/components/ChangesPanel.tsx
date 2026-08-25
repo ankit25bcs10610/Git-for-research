@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getChanges, markSeen, type Commit } from '../api'
+import { useProfile } from '../profile/ProfileContext'
 import Card from './ui/Card'
-
-const USER_ID = 'user-1'
 
 interface Props {
   artifactId: string
@@ -13,12 +12,14 @@ const INPUT =
   'rounded-md border border-stone-300 bg-white px-2 py-1 text-sm text-stone-900 focus:border-cyan-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
 
 export default function ChangesPanel({ artifactId, refreshSignal }: Props) {
+  const { profile } = useProfile()
+  const userId = profile?.username ?? ''
   const [branchName, setBranchName] = useState('main')
   const [commits, setCommits] = useState<Commit[]>([])
   const [status, setStatus] = useState('')
 
   function refresh() {
-    getChanges(artifactId, USER_ID, branchName)
+    getChanges(artifactId, userId, branchName)
       .then(setCommits)
       .catch((err) => setStatus((err as Error).message))
   }
@@ -31,7 +32,7 @@ export default function ChangesPanel({ artifactId, refreshSignal }: Props) {
   async function handleMarkSeen() {
     if (commits.length === 0) return
     try {
-      await markSeen(artifactId, USER_ID, commits[commits.length - 1].id)
+      await markSeen(artifactId, userId, commits[commits.length - 1].id)
       setStatus(`Marked seen up to ${commits[commits.length - 1].id.slice(0, 8)}`)
       refresh()
     } catch (err) {
@@ -40,7 +41,7 @@ export default function ChangesPanel({ artifactId, refreshSignal }: Props) {
   }
 
   return (
-    <Card title={`6. What changed since I last looked (${USER_ID})`}>
+    <Card title={`6. What changed since I last looked (${userId})`}>
       <div className="mb-3 flex items-center gap-2">
         <span className="text-sm font-semibold text-stone-700 dark:text-slate-300">Branch:</span>
         <input value={branchName} onChange={(e) => setBranchName(e.target.value)} className={`${INPUT} w-32`} />

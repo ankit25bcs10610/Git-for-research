@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createBranch, createCommit, getContent, listBranches, type Branch } from '../api'
+import { useProfile } from '../profile/ProfileContext'
 import Card from './ui/Card'
 
 interface Props {
@@ -15,6 +16,7 @@ const BUTTON =
   'rounded-md bg-stone-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-stone-700 dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400'
 
 export default function BranchesPanel({ artifactId, refreshSignal, onChanged, focusRef }: Props) {
+  const { profile } = useProfile()
   const [branches, setBranches] = useState<Branch[]>([])
   const [newBranchName, setNewBranchName] = useState('')
   const [newBranchFrom, setNewBranchFrom] = useState('main')
@@ -61,7 +63,7 @@ export default function BranchesPanel({ artifactId, refreshSignal, onChanged, fo
   async function handleCommit(e: React.FormEvent) {
     e.preventDefault()
     try {
-      const result = await createCommit(artifactId, commitBranch, commitContent, commitMessage)
+      const result = await createCommit(artifactId, commitBranch, commitContent, commitMessage, profile?.username ?? '')
       setStatus(`Committed ${result.commit_ref} on ${result.branch_name}`)
       setCommitMessage('')
       refresh()
