@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, tokenizer_for_type
+from app.api.deps import get_db, require_user, tokenizer_for_type
 from app.artifacts import get_artifact, list_artifacts
 from app.crdt.last_seen import get_changes_since, mark_seen
 from app.db.models import Branch, MergeRequest
@@ -23,7 +23,7 @@ class CommitRequest(BaseModel):
     branch_name: str
     content: str
     message: str
-    author: str = "user-1"
+    author: str
 
 
 class SeenRequest(BaseModel):
@@ -103,6 +103,7 @@ def create_branch_route(artifact_id: str, body: BranchRequest, db: Session = Dep
 @router.post("/artifacts/{artifact_id}/commits")
 def create_commit_route(artifact_id: str, body: CommitRequest, db: Session = Depends(get_db)):
     a = _artifact_or_404(db, artifact_id)
+    require_user(db, body.author)
     artifact = DagVersionedArtifact(db, artifact_id, tokenizer_for_type(a.type))
     parent_ref = artifact.branch_head(body.branch_name)
     if parent_ref is None:
@@ -136,6 +137,7 @@ def get_changes_route(
     artifact_id: str, user_id: str, branch_name: str = "main", db: Session = Depends(get_db)
 ):
     _artifact_or_404(db, artifact_id)
+    require_user(db, user_id)
     commits = get_changes_since(db, user_id, artifact_id, branch_name)
     return [
         {
@@ -151,5 +153,6 @@ def get_changes_route(
 @router.post("/artifacts/{artifact_id}/seen")
 def mark_seen_route(artifact_id: str, body: SeenRequest, db: Session = Depends(get_db)):
     _artifact_or_404(db, artifact_id)
+    require_user(db, body.user_id)
     mark_seen(db, body.user_id, artifact_id, body.commit_ref)
     return {"status": "ok"}
