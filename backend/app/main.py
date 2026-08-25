@@ -1,11 +1,24 @@
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import routes_collab, routes_crdt, routes_ingestion, routes_retrieval, routes_users, routes_versioning
+from app.db.bootstrap import ensure_schema
 
-app = FastAPI(title="Git for Research API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # On a fresh database volume, app/db/init.sql only creates the `vector`
+    # extension -- there is no separate migration step that creates the
+    # actual tables, so every DB-backed route would 500 on first boot
+    # without this. Idempotent: safe to run again on every restart.
+    ensure_schema()
+    yield
+
+
+app = FastAPI(title="Git for Research API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
