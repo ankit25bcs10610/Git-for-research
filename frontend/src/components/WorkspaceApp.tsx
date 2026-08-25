@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import IngestPanel from './IngestPanel'
 import ArtifactList from './ArtifactList'
 import BranchesPanel from './BranchesPanel'
@@ -9,8 +9,11 @@ import AgentEditPanel from './AgentEditPanel'
 import SearchPanel from './SearchPanel'
 import CommitGraph3D from './CommitGraph3D'
 import LiveEditor from './LiveEditor'
+import CodebaseBranchesPanel from './CodebaseBranchesPanel'
+import CodebaseDiffPanel from './CodebaseDiffPanel'
+import CodebaseMergeRequestsPanel from './CodebaseMergeRequestsPanel'
 import Card from './ui/Card'
-import { API_BASE_URL } from '../api'
+import { API_BASE_URL, getArtifact, type Artifact } from '../api'
 
 interface Props {
   onBack: () => void
@@ -19,8 +22,19 @@ interface Props {
 export default function WorkspaceApp({ onBack }: Props) {
   const [workspaceId, setWorkspaceId] = useState('demo-workspace')
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
+  const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null)
   const [refreshSignal, setRefreshSignal] = useState(0)
   const [focusedRef, setFocusedRef] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!activeArtifactId) {
+      setActiveArtifact(null)
+      return
+    }
+    getArtifact(activeArtifactId)
+      .then(setActiveArtifact)
+      .catch(() => setActiveArtifact(null))
+  }, [activeArtifactId, refreshSignal])
 
   function bump() {
     setRefreshSignal((n) => n + 1)
@@ -68,7 +82,18 @@ export default function WorkspaceApp({ onBack }: Props) {
           refreshSignal={refreshSignal}
         />
 
-        {activeArtifactId ? (
+        {activeArtifactId && activeArtifact?.type === 'codebase' ? (
+          <>
+            <p className="text-xs italic text-stone-500 dark:text-slate-500">
+              Codebase artifact — real git history on disk (branches/commits/merges via pygit2), not the
+              Postgres-backed commit graph above. Semantic search, live co-editing, and agent-edit apply to
+              doc/chat/pdf artifacts only.
+            </p>
+            <CodebaseBranchesPanel artifactId={activeArtifactId} refreshSignal={refreshSignal} onChanged={bump} />
+            <CodebaseDiffPanel artifactId={activeArtifactId} />
+            <CodebaseMergeRequestsPanel artifactId={activeArtifactId} refreshSignal={refreshSignal} onChanged={bump} />
+          </>
+        ) : activeArtifactId ? (
           <>
             <Card title="Commit graph">
               <CommitGraph3D

@@ -104,7 +104,7 @@ export function createUser(username: string, displayName?: string): Promise<User
   return postJson('/users', { username, display_name: displayName })
 }
 
-export type IngestKind = 'markdown' | 'chatgpt' | 'claude' | 'pdf'
+export type IngestKind = 'markdown' | 'chatgpt' | 'claude' | 'pdf' | 'codebase'
 
 export async function ingestArtifact(
   workspaceId: string,
@@ -127,6 +127,10 @@ export async function ingestArtifact(
 
 export function listArtifacts(workspaceId: string): Promise<Artifact[]> {
   return request(`/workspaces/${encodeURIComponent(workspaceId)}/artifacts`)
+}
+
+export function getArtifact(artifactId: string): Promise<Artifact> {
+  return request(`/artifacts/${artifactId}`)
 }
 
 export function listBranches(artifactId: string): Promise<Branch[]> {
@@ -247,4 +251,97 @@ export function commitLiveSnapshot(
   author: string,
 ): Promise<{ commit_ref: string }> {
   return postJson(`/artifacts/${artifactId}/live/commit-snapshot`, { branch_name: branchName, author })
+}
+
+// --- Codebase artifacts (git-backed, via pygit2) ---------------------------
+
+export interface CodebaseFileChange {
+  path: string
+  status: 'added' | 'removed' | 'modified'
+}
+
+export interface CodebaseMergeConflict {
+  path: string
+  base: string | null
+  ours: string | null
+  theirs: string | null
+}
+
+export interface CodebaseMergeRequestDiff {
+  conflicts: CodebaseMergeConflict[]
+  has_conflict: boolean
+}
+
+export function listCodebaseBranches(artifactId: string): Promise<Branch[]> {
+  return request(`/artifacts/${artifactId}/codebase/branches`)
+}
+
+export function createCodebaseBranch(artifactId: string, name: string, fromRef: string): Promise<Branch> {
+  return postJson(`/artifacts/${artifactId}/codebase/branches`, { name, from_ref: fromRef })
+}
+
+export function createCodebaseCommit(
+  artifactId: string,
+  branchName: string,
+  files: Record<string, string>,
+  message: string,
+  author: string,
+): Promise<{ commit_ref: string; branch_name: string }> {
+  return postJson(`/artifacts/${artifactId}/codebase/commits`, { branch_name: branchName, files, message, author })
+}
+
+export function getCodebaseDiff(
+  artifactId: string,
+  refA: string,
+  refB: string,
+): Promise<{ changes: CodebaseFileChange[] }> {
+  return request(
+    `/artifacts/${artifactId}/codebase/diff?ref_a=${encodeURIComponent(refA)}&ref_b=${encodeURIComponent(refB)}`,
+  )
+}
+
+export function getCodebaseContent(artifactId: string, ref: string): Promise<{ files: Record<string, string> }> {
+  return request(`/artifacts/${artifactId}/codebase/content?ref=${encodeURIComponent(ref)}`)
+}
+
+export function listCodebaseMergeRequests(artifactId: string): Promise<MergeRequestSummary[]> {
+  return request(`/artifacts/${artifactId}/codebase/merge-requests`)
+}
+
+export function createCodebaseMergeRequest(
+  artifactId: string,
+  sourceBranch: string,
+  targetBranch: string,
+  author: string,
+): Promise<{ merge_request_id: string }> {
+  return postJson(`/artifacts/${artifactId}/codebase/merge-requests`, {
+    source_branch: sourceBranch,
+    target_branch: targetBranch,
+    author,
+  })
+}
+
+export function getCodebaseMergeRequestDiff(mrId: string): Promise<CodebaseMergeRequestDiff> {
+  return request(`/codebase/merge-requests/${mrId}/diff`)
+}
+
+export async function mergeCodebaseMergeRequest(
+  mrId: string,
+  resolutions: Record<string, string> | null,
+  author: string,
+): Promise<{ merged: boolean }> {
+  const response = await fetch(`${BASE_URL}/codebase/merge-requests/${mrId}/merge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resolutions, author }),
+  })
+  const body = await response.json()
+  if (!response.ok) {
+    throw new Error(body.detail ?? `merge failed (${response.status})`)
+  }
+  return body
+}
+
+export function rejectCodebaseMergeRequest(mrId: string, author: string): Promise<{ status: string }> {
+  return postJson(`/codebase/merge-requests/${mrId}/reject`, { author })
 }

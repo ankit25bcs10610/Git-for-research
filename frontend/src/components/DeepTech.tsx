@@ -14,15 +14,21 @@ const ITEMS: TechItem[] = [
     status: 'working',
   },
   {
-    title: "Paragraph-level diff, but merge conflicts aren't chat-aware yet",
+    title: 'Paragraph-level diff, and merge conflicts are chat-aware',
     description:
-      'Diffs use whichever tokenizer matches the artifact — paragraphs for docs, one token per message for chat — via SequenceMatcher plus nested word-level diffing. Merge requests, however, currently hardcode the paragraph tokenizer for every artifact type, so a conflicting chat merge surfaces as one conflict spanning the whole conversation rather than per message. The merge algorithm itself (real diff3-style three-way comparison) is sound; this is a known granularity gap on the list to fix.',
-    status: 'gap',
+      'Diffs and merges both use whichever tokenizer matches the artifact — paragraphs for docs, one token per message for chat — via SequenceMatcher plus nested word-level diffing and a real diff3-style three-way comparison. A conflicting chat merge surfaces one conflict per message, not one conflict spanning the whole conversation.',
+    status: 'working',
   },
   {
     title: 'Ingestion: one artifact per document, one artifact per conversation',
     description:
-      'Markdown and PDF each become the first commit of exactly one new artifact. ChatGPT and Claude exports are walked conversation-by-conversation, creating one artifact per conversation in a single ingest call. PDF extraction is page-by-page text (no OCR, so scanned PDFs come out empty). A tree-sitter codebase parser and a pygit2-backed engine exist in the code but are not wired to any API route yet.',
+      'Markdown and PDF each become the first commit of exactly one new artifact. ChatGPT and Claude exports are walked conversation-by-conversation, creating one artifact per conversation in a single ingest call. PDF extraction is page-by-page text (no OCR, so scanned PDFs come out empty).',
+    status: 'working',
+  },
+  {
+    title: 'Codebase artifacts: real git repos, wired end-to-end',
+    description:
+      'A zip upload is unpacked into an actual git repository on disk (pygit2), tree-sitter-chunked function-by-function for semantic search, and exposed over its own branch/commit/diff/merge-request routes with file-path-level conflicts — a second, git-native versioning engine alongside the Postgres-backed one docs and chat use, not a reuse of it.',
     status: 'working',
   },
   {

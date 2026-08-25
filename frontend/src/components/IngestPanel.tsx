@@ -13,6 +13,7 @@ const KINDS: { value: IngestKind; label: string }[] = [
   { value: 'chatgpt', label: 'ChatGPT export' },
   { value: 'claude', label: 'Claude export' },
   { value: 'pdf', label: 'PDF' },
+  { value: 'codebase', label: 'Codebase (.zip)' },
 ]
 
 const INPUT =
@@ -54,6 +55,7 @@ export default function IngestPanel({ workspaceId, onIngested }: Props) {
         </select>
         <input
           type="file"
+          accept={kind === 'codebase' ? '.zip' : undefined}
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           className="text-sm text-stone-700 dark:text-slate-300"
         />

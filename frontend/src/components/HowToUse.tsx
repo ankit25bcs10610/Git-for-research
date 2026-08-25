@@ -11,7 +11,7 @@ const STEPS: Step[] = [
     step: 1,
     title: 'Ingest an artifact',
     description:
-      'Set a workspace ID (defaults to demo-workspace), pick a kind — Markdown, ChatGPT export, Claude export, or PDF — choose a file, and ingest it. Markdown and PDF each produce exactly one new artifact, committed as the first commit on its own main branch and indexed for search automatically. ChatGPT and Claude exports are handled per conversation: the app parses every conversation in the export and creates one artifact per conversation in the same step.',
+      'Set a workspace ID (defaults to demo-workspace), pick a kind — Markdown, ChatGPT export, Claude export, PDF, or a Codebase (.zip) — choose a file, and ingest it. Markdown, PDF, and Codebase each produce exactly one new artifact, committed as the first commit on its own main branch and indexed for search automatically. ChatGPT and Claude exports are handled per conversation: the app parses every conversation in the export and creates one artifact per conversation in the same step.',
   },
   {
     step: 2,
@@ -47,7 +47,7 @@ const STEPS: Step[] = [
     step: 7,
     title: 'Open and resolve a merge request',
     description:
-      'Open a merge request between two branches and review its diff. If content conflicts, the merge is blocked until you submit a resolution for every conflicting position; a clean merge produces a real two-parent commit. For chat artifacts, conflict detection currently treats the whole conversation as a single position rather than per message — a known granularity gap, not a bug in the merge logic itself.',
+      'Open a merge request between two branches and review its diff. If content conflicts, the merge is blocked until you submit a resolution for every conflicting position (or, for a codebase artifact, every conflicting file path); a clean merge produces a real two-parent commit either way. A codebase artifact swaps the commit graph, branches, diff, and merge-request panels for git-backed equivalents — real branches/commits/merges via pygit2 on a real repo on disk, not the Postgres-backed model the rest of the app uses.',
   },
   {
     step: 8,
