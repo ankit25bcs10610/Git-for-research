@@ -86,15 +86,31 @@ export interface ArtifactGraph {
   merge_requests: MergeRequestSummary[]
 }
 
+export interface UserProfile {
+  id: string
+  username: string
+  display_name: string
+}
+
+export function listUsers(): Promise<UserProfile[]> {
+  return request('/users')
+}
+
+export function createUser(username: string, displayName?: string): Promise<UserProfile> {
+  return postJson('/users', { username, display_name: displayName })
+}
+
 export type IngestKind = 'markdown' | 'chatgpt' | 'claude' | 'pdf'
 
 export async function ingestArtifact(
   workspaceId: string,
   kind: IngestKind,
   file: File,
+  author: string,
 ): Promise<string[]> {
   const form = new FormData()
   form.append('file', file)
+  form.append('author', author)
   const body = await request<
     { artifact_id: string; commit_ref: string } | { artifacts: { artifact_id: string }[] }
   >(`/workspaces/${encodeURIComponent(workspaceId)}/artifacts/ingest/${kind}`, {
@@ -126,7 +142,7 @@ export function createCommit(
   branchName: string,
   content: string,
   message: string,
-  author = 'user-1',
+  author: string,
 ): Promise<{ commit_ref: string; branch_name: string }> {
   return postJson(`/artifacts/${artifactId}/commits`, { branch_name: branchName, content, message, author })
 }
